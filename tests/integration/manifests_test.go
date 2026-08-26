@@ -50,6 +50,53 @@ func TestArmsPinSameImagesAndDifferOnlyByRoutingProfile(t *testing.T) {
 	}
 }
 
+func TestRealGPUValuesRouteOnlyToTheDeclaredModelService(t *testing.T) {
+	repository := repositoryRoot(t)
+	helm := findHelm(t, repository)
+	command := exec.Command(helm,
+		"template", "velaserve", filepath.Join(repository, "deploy", "helm", "velaserve"),
+		"--namespace", "velaserve-z0",
+		"-f", filepath.Join(repository, "deploy", "experiments", "aws-z0-values.yaml"),
+		"--set", "images.velaserve.digest=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+		"--set-string", "images.upstreamEPP.tag=git-ab723b898f8598ab6631e9848a4cf28accd9b9ea@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+	)
+	output, err := command.CombinedOutput()
+	if err != nil {
+		t.Fatalf("helm template failed: %v\n%s", err, output)
+	}
+	rendered := string(output)
+	for _, required := range []string{
+		"url: http://velaserve-model.velaserve-z0.svc.cluster.local:8000",
+		"number: 8000",
+		"app.kubernetes.io/name: velaserve-model",
+	} {
+		if !strings.Contains(rendered, required) {
+			t.Fatalf("real-GPU render is missing %q", required)
+		}
+	}
+	if strings.Contains(rendered, "velaserve-simfleet") {
+		t.Fatal("real-GPU render still targets the local simulator")
+	}
+}
+
+func TestRealGPUValuesRequireDigestAddressedEPP(t *testing.T) {
+	repository := repositoryRoot(t)
+	helm := findHelm(t, repository)
+	command := exec.Command(helm,
+		"template", "velaserve", filepath.Join(repository, "deploy", "helm", "velaserve"),
+		"--namespace", "velaserve-z0",
+		"-f", filepath.Join(repository, "deploy", "experiments", "aws-z0-values.yaml"),
+		"--set", "images.velaserve.digest=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+	)
+	output, err := command.CombinedOutput()
+	if err == nil {
+		t.Fatal("real-GPU render accepted a tag-only upstream EPP image")
+	}
+	if !strings.Contains(string(output), "real_gpu evidence requires a digest-addressed upstream EPP image") {
+		t.Fatalf("unexpected validation failure: %s", output)
+	}
+}
+
 func renderStageOne(t *testing.T, arm string) string {
 	t.Helper()
 	repository := repositoryRoot(t)

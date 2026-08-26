@@ -3,6 +3,13 @@ routingProfile: arm-b-load-aware-p2p
 eppReplicas: 1
 activeActiveObservation: false
 
+model:
+  name: Qwen/Qwen3-8B
+  metricsURL: http://velaserve-model.velaserve-z0.svc.cluster.local:8000
+  targetPort: 8000
+  matchLabels:
+    app.kubernetes.io/name: velaserve-model
+
 realGPU:
   replicas: 6
   minimumReplicas: 6

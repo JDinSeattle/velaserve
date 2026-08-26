@@ -6,6 +6,10 @@ require_env() {
   [[ -n "${!name:-}" ]] || { echo "cloud-cleanup: $name is required" >&2; exit 1; }
 }
 
+for command_name in aws kubectl jq helm; do
+  command -v "$command_name" >/dev/null 2>&1 || { echo "cloud-cleanup: $command_name is required" >&2; exit 1; }
+done
+
 for variable_name in \
   VELASERVE_CLUSTER_NAME \
   VELASERVE_NAMESPACE \

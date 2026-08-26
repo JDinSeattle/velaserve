@@ -9,6 +9,8 @@ require_env() {
   [[ -n "${!name:-}" ]] || { echo "cloud-run-z0: $name is required" >&2; exit 1; }
 }
 
+command -v go >/dev/null 2>&1 || { echo "cloud-run-z0: go is required" >&2; exit 1; }
+
 for variable_name in VELASERVE_ARTIFACT_ROOT VELASERVE_ACTIVE_ARM VELASERVE_EPP_REPLICAS VELASERVE_MODEL_ID VELASERVE_ENDPOINT; do
   require_env "$variable_name"
 done

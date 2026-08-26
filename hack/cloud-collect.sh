@@ -19,7 +19,7 @@ for variable_name in \
   VELASERVE_ORACLE_CALIBRATION; do
   require_env "$variable_name"
 done
-for command_name in aws kubectl jq go shasum; do
+for command_name in aws kubectl jq go shasum curl find; do
   command -v "$command_name" >/dev/null 2>&1 || { echo "cloud-collect: $command_name is required" >&2; exit 1; }
 done
 [[ -d "$VELASERVE_ARTIFACT_ROOT" && ! -L "$VELASERVE_ARTIFACT_ROOT" ]] || { echo "cloud-collect: artifact root must be an existing real directory" >&2; exit 1; }

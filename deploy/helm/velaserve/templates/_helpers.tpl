@@ -20,7 +20,10 @@ helm.sh/chart: {{ printf "%s-%s" .Chart.Name .Chart.Version | quote }}
 {{- if and (gt (int .Values.eppReplicas) 1) (not .Values.activeActiveObservation) -}}
 {{- fail "eppReplicas > 1 requires activeActiveObservation=true and remains dispersion-only" -}}
 {{- end -}}
-{{- if and (eq .Values.evidenceScope "real_gpu") (not .Values.images.velaserve.digest) -}}
+{{- if and (eq .Values.evidenceScope "real_gpu") (not (regexMatch "^sha256:[a-f0-9]{64}$" .Values.images.velaserve.digest)) -}}
 {{- fail "real_gpu evidence requires images.velaserve.digest with an exact sha256 digest" -}}
+{{- end -}}
+{{- if and (eq .Values.evidenceScope "real_gpu") (not (regexMatch "^.+@sha256:[a-f0-9]{64}$" .Values.images.upstreamEPP.tag)) -}}
+{{- fail "real_gpu evidence requires a digest-addressed upstream EPP image in images.upstreamEPP.tag" -}}
 {{- end -}}
 {{- end -}}

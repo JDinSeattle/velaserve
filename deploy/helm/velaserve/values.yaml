@@ -6,6 +6,10 @@ model:
   name: velaserve-simulator
   prefixTokens: 4096
   minCachedTokenDelta: 2048
+  metricsURL: http://velaserve-simfleet:8000
+  targetPort: 8000
+  matchLabels:
+    app.kubernetes.io/name: velaserve-simfleet
 
 images:
   velaserve:

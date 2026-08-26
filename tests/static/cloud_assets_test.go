@@ -57,6 +57,22 @@ func TestCleanupRequiresExactClusterArtifactAndTypedConfirmation(t *testing.T) {
 	}
 }
 
+func TestCloudScriptsDeclareEveryNonShellRuntimeDependency(t *testing.T) {
+	checks := map[string][]string{
+		"cloud-run-z0.sh":  {"command -v go"},
+		"cloud-collect.sh": {"for command_name in aws kubectl jq go shasum curl find"},
+		"cloud-cleanup.sh": {"for command_name in aws kubectl jq helm"},
+	}
+	for script, required := range checks {
+		contents := readRepositoryFile(t, "hack", script)
+		for _, text := range required {
+			if !strings.Contains(contents, text) {
+				t.Fatalf("%s does not declare runtime dependency %q", script, text)
+			}
+		}
+	}
+}
+
 func TestAWSZ0ValuesRequireRealGPUAndSixReplicas(t *testing.T) {
 	values := readRepositoryFile(t, "deploy", "experiments", "aws-z0-values.yaml")
 	for _, required := range []string{"evidenceScope: real_gpu", "replicas: 6", "enabled: false"} {

@@ -30,7 +30,7 @@ data:
                 parameters:
                   modelName: {{ .Values.model.name }}
                   vllm:
-                    url: http://velaserve-simfleet:{{ .Values.simfleet.port }}
+                    url: {{ required "model.metricsURL is required" .Values.model.metricsURL }}
               - type: endpoint-notification-source
               - type: metrics-data-source
                 parameters:
@@ -119,9 +119,9 @@ data:
       modelServers:
         protocol: http
         targetPorts:
-          - number: {{ .Values.simfleet.port }}
+          - number: {{ .Values.model.targetPort }}
         matchLabels:
-          app.kubernetes.io/name: velaserve-simfleet
+          {{- toYaml .Values.model.matchLabels | nindent 10 }}
       proxy:
         enabled: true
         proxyType: envoy
