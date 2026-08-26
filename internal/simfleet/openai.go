@@ -33,6 +33,15 @@ type simulatorRequest struct {
 }
 
 func (fleet *Fleet) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
+	if request.Method == http.MethodGet && request.URL.Path == "/metrics" {
+		writer.Header().Set("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
+		fmt.Fprint(writer, "# TYPE vllm:num_requests_waiting gauge\nvllm:num_requests_waiting 0\n# TYPE vllm:num_requests_running gauge\nvllm:num_requests_running 0\n# TYPE vllm:kv_cache_usage_perc gauge\nvllm:kv_cache_usage_perc 0.25\n")
+		return
+	}
+	if request.Method == http.MethodPost && (request.URL.Path == "/v1/completions/render" || request.URL.Path == "/v1/chat/completions/render") {
+		serveRender(writer, request)
+		return
+	}
 	startedAt := time.Now().UTC()
 	responseCode := http.StatusOK
 	requestID := request.Header.Get(protocol.HeaderRequestID)
@@ -44,6 +53,18 @@ func (fleet *Fleet) ServeHTTP(writer http.ResponseWriter, request *http.Request)
 	if request.Method != http.MethodPost || request.URL.Path != "/v1/chat/completions" {
 		responseCode = http.StatusNotFound
 		http.Error(writer, "simfleet exposes POST /v1/chat/completions", responseCode)
+		return
+	}
+	body, err := fleet.decodeOpenAIRequest(request)
+	if err != nil {
+		responseCode = http.StatusBadRequest
+		http.Error(writer, err.Error(), responseCode)
+		return
+	}
+	if strings.TrimSpace(request.Header.Get(bench.HeaderSimulatorArm)) == "" {
+		if !writeOpenAIStream(writer, request, fleet.config.LocalTTFT, fleet.config.OutputDelay, body.MaxTokens, "simulated upstream candidate") {
+			responseCode = 499
+		}
 		return
 	}
 	width, err := parseUint32Header(request, protocol.HeaderWidth)
@@ -85,19 +106,6 @@ func (fleet *Fleet) ServeHTTP(writer http.ResponseWriter, request *http.Request)
 		return
 	}
 
-	decoder := json.NewDecoder(io.LimitReader(request.Body, maxSimulatorRequestBytes+1))
-	decoder.DisallowUnknownFields()
-	var body simulatorRequest
-	if err := decoder.Decode(&body); err != nil {
-		responseCode = http.StatusBadRequest
-		http.Error(writer, "invalid OpenAI request: "+err.Error(), responseCode)
-		return
-	}
-	if body.Model != fleet.config.Model || !body.Stream || !body.StreamOptions.IncludeUsage || body.MaxTokens == 0 || len(body.Messages) == 0 {
-		responseCode = http.StatusBadRequest
-		http.Error(writer, "unsupported OpenAI request", responseCode)
-		return
-	}
 	fleet.recordEPP(startedAt, requestID, groupID, target)
 	writer.Header().Set(bench.HeaderSimulatorTarget, targetID)
 	if configured, fail := fleet.config.FailureSlots[slot]; fail {
@@ -106,25 +114,71 @@ func (fleet *Fleet) ServeHTTP(writer http.ResponseWriter, request *http.Request)
 		return
 	}
 
+	ttft := fleet.simulatedTTFT(arm, targetID)
+	if !writeOpenAIStream(writer, request, ttft, fleet.config.OutputDelay, body.MaxTokens, fmt.Sprintf("simulated candidate %d", slot+1)) {
+		responseCode = 499
+	}
+}
+
+func serveRender(writer http.ResponseWriter, request *http.Request) {
+	decoder := json.NewDecoder(io.LimitReader(request.Body, maxSimulatorRequestBytes+1))
+	decoder.UseNumber()
+	var body any
+	if err := decoder.Decode(&body); err != nil {
+		http.Error(writer, "invalid render request: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	canonical, err := json.Marshal(body)
+	if err != nil {
+		http.Error(writer, "invalid render request", http.StatusBadRequest)
+		return
+	}
+	tokenIDs := make([]uint32, len(canonical))
+	for index, value := range canonical {
+		tokenIDs[index] = uint32(value) + 1
+	}
+	response := struct {
+		TokenIDs []uint32 `json:"token_ids"`
+	}{TokenIDs: tokenIDs}
+	writer.Header().Set("Content-Type", "application/json")
+	if request.URL.Path == "/v1/completions/render" {
+		_ = json.NewEncoder(writer).Encode([]any{response})
+		return
+	}
+	_ = json.NewEncoder(writer).Encode(response)
+}
+
+func (fleet *Fleet) decodeOpenAIRequest(request *http.Request) (simulatorRequest, error) {
+	decoder := json.NewDecoder(io.LimitReader(request.Body, maxSimulatorRequestBytes+1))
+	decoder.DisallowUnknownFields()
+	var body simulatorRequest
+	if err := decoder.Decode(&body); err != nil {
+		return simulatorRequest{}, fmt.Errorf("invalid OpenAI request: %w", err)
+	}
+	if body.Model != fleet.config.Model || !body.Stream || !body.StreamOptions.IncludeUsage || body.MaxTokens == 0 || len(body.Messages) == 0 {
+		return simulatorRequest{}, fmt.Errorf("unsupported OpenAI request")
+	}
+	return body, nil
+}
+
+func writeOpenAIStream(writer http.ResponseWriter, request *http.Request, ttft, outputDelay time.Duration, maxTokens uint32, content string) bool {
 	writer.Header().Set("Content-Type", "text/event-stream")
 	writer.Header().Set("Cache-Control", "no-cache")
 	writer.WriteHeader(http.StatusOK)
-	ttft := fleet.simulatedTTFT(arm, targetID)
 	if !waitFor(request, ttft) {
-		responseCode = 499
-		return
+		return false
 	}
-	fmt.Fprintf(writer, "data: {\"choices\":[{\"delta\":{\"role\":\"assistant\"}}]}\n\n")
+	fmt.Fprint(writer, "data: {\"choices\":[{\"delta\":{\"role\":\"assistant\"}}]}\n\n")
 	flush(writer)
-	fmt.Fprintf(writer, "data: {\"choices\":[{\"delta\":{\"content\":\"simulated candidate %d\"}}]}\n\n", slot+1)
+	fmt.Fprintf(writer, "data: {\"choices\":[{\"delta\":{\"content\":%q}}]}\n\n", content)
 	flush(writer)
-	if !waitFor(request, fleet.config.OutputDelay) {
-		responseCode = 499
-		return
+	if !waitFor(request, outputDelay) {
+		return false
 	}
-	fmt.Fprintf(writer, "data: {\"choices\":[],\"usage\":{\"completion_tokens\":%d}}\n\n", minUint32(body.MaxTokens, 8))
+	fmt.Fprintf(writer, "data: {\"choices\":[],\"usage\":{\"completion_tokens\":%d}}\n\n", minUint32(maxTokens, 8))
 	fmt.Fprint(writer, "data: [DONE]\n\n")
 	flush(writer)
+	return true
 }
 
 func (fleet *Fleet) planForGroup(groupID string, input GroupInput) ([]string, error) {

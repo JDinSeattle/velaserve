@@ -1,0 +1,9 @@
+apiVersion: v2
+name: velaserve
+description: Stage 1 zeroing harness around a pinned upstream llm-d Router
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+annotations:
+  velaserve.dev/evidence-stage: "stage1-zeroing-only"
+  velaserve.dev/coordination: "forbidden-before-real-gpu-gate"

@@ -1,0 +1,18 @@
+evidenceScope: simulation_only
+eppReplicas: 1
+activeActiveObservation: false
+images:
+  velaserve:
+    repository: docker.io/jdinseattle/velaserve
+    tag: v0.1.0
+    pullPolicy: Never
+  upstreamEPP:
+    registry: docker.io
+    repository: velaserve-llm-d-router
+    tag: git-ab723b898f8598ab6631e9848a4cf28accd9b9ea
+    pullPolicy: Never
+simfleet:
+  enabled: true
+  replicas: 8
+fanoutbench:
+  enabled: false

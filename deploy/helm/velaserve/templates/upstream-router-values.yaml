@@ -1,0 +1,141 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: velaserve-upstream-router-values
+  labels:
+    {{- include "velaserve.labels" . | nindent 4 }}
+  annotations:
+    velaserve.dev/source-commit: {{ .Values.upstream.llmDRouterCommit | quote }}
+data:
+  values.yaml: |
+    router:
+      epp:
+        replicas: {{ .Values.eppReplicas }}
+        image:
+          registry: {{ .Values.images.upstreamEPP.registry | quote }}
+          repository: {{ .Values.images.upstreamEPP.repository | quote }}
+          tag: {{ .Values.images.upstreamEPP.tag | quote }}
+          pullPolicy: {{ .Values.images.upstreamEPP.pullPolicy | quote }}
+        flags:
+          allow-experimental-plugins: true
+          v: 2
+          ha-enable-leader-election: false
+        pluginsConfigFile: velaserve-stage1.yaml
+        pluginsCustomConfig:
+          velaserve-stage1.yaml: |
+            apiVersion: llm-d.ai/v1alpha1
+            kind: EndpointPickerConfig
+            plugins:
+              - type: token-producer
+                parameters:
+                  modelName: {{ .Values.model.name }}
+                  vllm:
+                    url: http://velaserve-simfleet:{{ .Values.simfleet.port }}
+              - type: endpoint-notification-source
+              - type: metrics-data-source
+                parameters:
+                  scheme: http
+                  path: /metrics
+                  insecureSkipVerify: true
+              - type: core-metrics-extractor
+              - type: precise-prefix-cache-producer
+                parameters:
+                  indexerConfig:
+                    kvBlockIndexConfig:
+                      inMemoryConfig:
+                        podCacheSize: 32
+                    kvCacheBackendConfigs:
+                      - name: gpu
+                        weight: 1.0
+                      - name: cpu
+                        weight: 0.4
+                  tokenProcessorConfig:
+                    blockSize: 64
+                  kvEventsConfig:
+                    topicFilter: "kv@"
+                    discoverPods: true
+                    podDiscoveryConfig:
+                      socketPort: 5556
+              - type: p2p-source-producer
+                parameters:
+                  prefixMatchInfoProducerName: precise-prefix-cache-producer
+                  prefillProfileName: default
+                  minCachedTokenDelta: {{ .Values.model.minCachedTokenDelta }}
+            {{- if eq .Values.routingProfile "arm-a-affinity-p2p" }}
+              - type: prefix-cache-scorer
+                parameters:
+                  prefixMatchInfoProducerName: precise-prefix-cache-producer
+              - type: no-hit-lru-scorer
+                parameters:
+                  prefixMatchInfoProducerName: precise-prefix-cache-producer
+              - type: queue-scorer
+              - type: kv-cache-utilization-scorer
+              - type: max-score-picker
+              - type: single-profile-handler
+            {{- else }}
+              - type: queue-scorer
+              - type: kv-cache-utilization-scorer
+              - type: weighted-random-picker
+              - type: single-profile-handler
+            {{- end }}
+            dataLayer:
+              sources:
+                - pluginRef: metrics-data-source
+                  extractors:
+                    - pluginRef: core-metrics-extractor
+                - pluginRef: endpoint-notification-source
+                  extractors:
+                    - pluginRef: precise-prefix-cache-producer
+            schedulingProfiles:
+              - name: default
+                plugins:
+            {{- if eq .Values.routingProfile "arm-a-affinity-p2p" }}
+                  - pluginRef: max-score-picker
+                  - pluginRef: prefix-cache-scorer
+                    weight: 3
+                  - pluginRef: queue-scorer
+                    weight: 2
+                  - pluginRef: kv-cache-utilization-scorer
+                    weight: 2
+                  - pluginRef: no-hit-lru-scorer
+                    weight: 2
+            {{- else }}
+                  - pluginRef: weighted-random-picker
+                  - pluginRef: queue-scorer
+                    weight: 3
+                  - pluginRef: kv-cache-utilization-scorer
+                    weight: 2
+            {{- end }}
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: "1"
+            memory: 1Gi
+      inferencePool:
+        create: true
+        failureMode: FailOpen
+      modelServers:
+        protocol: http
+        targetPorts:
+          - number: {{ .Values.simfleet.port }}
+        matchLabels:
+          app.kubernetes.io/name: velaserve-simfleet
+      proxy:
+        enabled: true
+        proxyType: envoy
+        mode: sidecar
+        failOpen: true
+        presets:
+          envoy:
+            image: {{ .Values.images.envoy | quote }}
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 500m
+            memory: 256Mi
+      tracing:
+        enabled: false

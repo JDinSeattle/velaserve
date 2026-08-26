@@ -1,0 +1,5 @@
+FROM scratch
+COPY epp /app/epp
+USER 65532:65532
+EXPOSE 9002 9003 9090 5557
+ENTRYPOINT ["/app/epp"]

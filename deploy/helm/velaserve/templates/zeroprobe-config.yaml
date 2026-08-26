@@ -1,0 +1,29 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: velaserve-zeroing-contract
+  labels:
+    {{- include "velaserve.labels" . | nindent 4 }}
+data:
+  contract.yaml: |
+    schema_version: velaserve.deployment-contract/v1
+    evidence_scope: {{ .Values.evidenceScope | quote }}
+    routing_profile: {{ .Values.routingProfile | quote }}
+    epp_replicas: {{ .Values.eppReplicas }}
+    active_active_observation: {{ .Values.activeActiveObservation }}
+    active_active_warning: "EPP local state is unsynchronized; two replicas are dispersion observation only"
+    coordination_store: absent
+    production_picker: absent
+    upstream:
+      llm_d_router: {{ .Values.upstream.llmDRouterCommit | quote }}
+      llm_d: {{ .Values.upstream.llmDCommit | quote }}
+      llm_d_kv_cache: {{ .Values.upstream.llmDKVCacheCommit | quote }}
+      vllm: {{ .Values.upstream.vllmCommit | quote }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.fanoutbench.profileConfigMap }}
+data:
+  {{ .Values.fanoutbench.profileKey }}: |
+{{ .Files.Get "files/local-calibration.yaml" | indent 4 }}

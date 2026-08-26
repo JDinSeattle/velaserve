@@ -1,0 +1,8 @@
+.git
+.cache
+.tools
+benchmarks/raw
+dist
+terraform
+*.tfstate
+*.tfstate.*

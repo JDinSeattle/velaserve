@@ -1,0 +1,49 @@
+routingProfile: arm-b-load-aware-p2p
+eppReplicas: 1
+activeActiveObservation: false
+
+model:
+  name: velaserve-simulator
+  prefixTokens: 4096
+  minCachedTokenDelta: 2048
+
+images:
+  velaserve:
+    repository: docker.io/jdinseattle/velaserve
+    tag: v0.1.0
+    pullPolicy: IfNotPresent
+  upstreamEPP:
+    registry: docker.io
+    repository: velaserve-llm-d-router
+    tag: git-ab723b898f8598ab6631e9848a4cf28accd9b9ea
+    pullPolicy: IfNotPresent
+  envoy: docker.io/envoyproxy/envoy:distroless-v1.33.2
+
+simfleet:
+  enabled: true
+  replicas: 8
+  port: 8000
+  resources:
+    requests:
+      cpu: 20m
+      memory: 32Mi
+    limits:
+      cpu: 250m
+      memory: 128Mi
+
+fanoutbench:
+  enabled: false
+  endpoint: http://velaserve-epp:8081/v1/chat/completions
+  profileConfigMap: velaserve-benchmark-profile
+  profileKey: local-calibration.yaml
+  artifactVolume:
+    type: emptyDir
+    claimName: ""
+
+upstream:
+  llmDRouterCommit: ab723b898f8598ab6631e9848a4cf28accd9b9ea
+  llmDCommit: 3243fcf1191348b55c7811267a98117f8b7a6910
+  llmDKVCacheCommit: 8cf43067afb7fc9fefafc1b64de063c769f2c90f
+  vllmCommit: b1fbbc2ade51e3826bc92e4733c9c692ee21d42d
+
+evidenceScope: simulation_only

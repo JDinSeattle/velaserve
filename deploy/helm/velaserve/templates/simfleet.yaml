@@ -1,0 +1,66 @@
+{{- include "velaserve.validate" . -}}
+{{- if .Values.simfleet.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: velaserve-simfleet
+  labels:
+    {{- include "velaserve.labels" . | nindent 4 }}
+    app.kubernetes.io/name: velaserve-simfleet
+spec:
+  replicas: {{ .Values.simfleet.replicas }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: velaserve-simfleet
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: velaserve-simfleet
+        app.kubernetes.io/part-of: velaserve
+      annotations:
+        velaserve.dev/evidence-scope: simulation_only
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: simfleet
+          image: {{ include "velaserve.image" . }}
+          imagePullPolicy: {{ .Values.images.velaserve.pullPolicy }}
+          command: ["/app/simfleet"]
+          args: ["--listen", "0.0.0.0:{{ .Values.simfleet.port }}"]
+          ports:
+            - name: http
+              containerPort: {{ .Values.simfleet.port }}
+          readinessProbe:
+            tcpSocket:
+              port: http
+            periodSeconds: 2
+          livenessProbe:
+            tcpSocket:
+              port: http
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.simfleet.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            readOnlyRootFilesystem: true
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: velaserve-simfleet
+  labels:
+    app.kubernetes.io/name: velaserve-simfleet
+spec:
+  selector:
+    app.kubernetes.io/name: velaserve-simfleet
+  ports:
+    - name: http
+      port: {{ .Values.simfleet.port }}
+      targetPort: http
+{{- end }}

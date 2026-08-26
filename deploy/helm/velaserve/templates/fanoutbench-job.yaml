@@ -1,0 +1,55 @@
+{{- if .Values.fanoutbench.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: velaserve-fanoutbench
+  labels:
+    {{- include "velaserve.labels" . | nindent 4 }}
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: velaserve-fanoutbench
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: fanoutbench
+          image: {{ include "velaserve.image" . }}
+          imagePullPolicy: {{ .Values.images.velaserve.pullPolicy }}
+          command: ["/app/fanoutbench"]
+          args:
+            - --profile
+            - /config/{{ .Values.fanoutbench.profileKey }}
+            - --endpoint
+            - {{ .Values.fanoutbench.endpoint }}
+            - --output
+            - /artifacts/groups.jsonl
+          volumeMounts:
+            - name: profile
+              mountPath: /config
+              readOnly: true
+            - name: artifacts
+              mountPath: /artifacts
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            readOnlyRootFilesystem: true
+      volumes:
+        - name: profile
+          configMap:
+            name: {{ .Values.fanoutbench.profileConfigMap }}
+        - name: artifacts
+          {{- if eq .Values.fanoutbench.artifactVolume.type "persistentVolumeClaim" }}
+          persistentVolumeClaim:
+            claimName: {{ required "fanoutbench.artifactVolume.claimName is required for persistentVolumeClaim" .Values.fanoutbench.artifactVolume.claimName }}
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+{{- end }}

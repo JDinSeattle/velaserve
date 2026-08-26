@@ -1,0 +1,9 @@
+FROM scratch
+COPY simfleet /app/simfleet
+COPY fanoutbench /app/fanoutbench
+COPY zeroprobe /app/zeroprobe
+COPY velaserve-gate /app/velaserve-gate
+COPY oracle-replay /app/oracle-replay
+COPY schema-check /app/schema-check
+USER 65532:65532
+ENTRYPOINT ["/app/simfleet"]
