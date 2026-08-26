@@ -11,6 +11,7 @@ images:
   velaserve:
     repository: docker.io/jdinseattle/velaserve
     tag: v0.1.0
+    digest: ""
     pullPolicy: IfNotPresent
   upstreamEPP:
     registry: docker.io

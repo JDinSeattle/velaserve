@@ -3,6 +3,7 @@ set -euo pipefail
 
 readonly HELM_VERSION="3.21.4"
 readonly KIND_VERSION="0.32.0"
+readonly TERRAFORM_VERSION="1.15.8"
 readonly REPOSITORY_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 readonly BIN_DIR="${REPOSITORY_ROOT}/.tools/bin"
 
@@ -37,7 +38,7 @@ download_verified() {
   curl --fail --location --silent --show-error "$url" --output "$destination"
   curl --fail --location --silent --show-error "$checksum_url" --output "$checksum_file"
   local expected
-  expected="$(awk 'NR == 1 {print $1}' "$checksum_file")"
+  expected="$(awk -v artifact="$(basename "$url")" '$2 == artifact {print $1; exit} NF == 1 && NR == 1 {print $1}' "$checksum_file")"
   local actual
   actual="$(checksum "$destination")"
   if [[ -z "$expected" || "$actual" != "$expected" ]]; then
@@ -61,5 +62,14 @@ if [[ ! -x "${BIN_DIR}/kind" ]] || ! "${BIN_DIR}/kind" version | grep -q "v${KIN
   install -m 0755 "$kind_binary" "${BIN_DIR}/kind"
 fi
 
+if [[ ! -x "${BIN_DIR}/terraform" ]] || [[ "$("${BIN_DIR}/terraform" version -json | awk -F '"' '/terraform_version/ {print $4}')" != "$TERRAFORM_VERSION" ]]; then
+  terraform_archive="${temporary_directory}/terraform_${TERRAFORM_VERSION}_${platform_os}_${platform_arch}.zip"
+  terraform_url="https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/$(basename "$terraform_archive")"
+  download_verified "$terraform_url" "$terraform_archive" "https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_SHA256SUMS"
+  unzip -q "$terraform_archive" -d "$temporary_directory/terraform"
+  install -m 0755 "${temporary_directory}/terraform/terraform" "${BIN_DIR}/terraform"
+fi
+
 echo "helm=$(${BIN_DIR}/helm version --short)"
 echo "kind=$(${BIN_DIR}/kind version)"
+echo "terraform=$(${BIN_DIR}/terraform version -json | awk -F '"' '/terraform_version/ {print $4}')"

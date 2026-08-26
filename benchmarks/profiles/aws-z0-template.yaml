@@ -1,0 +1,49 @@
+schema_version: velaserve.benchmark-profile/v1
+seed: 20260825
+run_id_prefix: aws-z0
+model: Qwen/Qwen3-8B
+max_width: 16
+timeout_ms: 180000
+repetitions: 3
+widths: [2, 4, 8, 16]
+arrival_skews_ms: [0, 1, 5, 20]
+arms: [arm-b-load-aware-p2p]
+prefixes:
+  - id: below-zeroing-crossover
+    estimated_tokens: 1024
+    repeat_text: "shared zeroing context token "
+    repeat_count: 256
+  - id: near-zeroing-crossover
+    estimated_tokens: 4096
+    repeat_text: "shared zeroing context token "
+    repeat_count: 1024
+  - id: above-zeroing-crossover
+    estimated_tokens: 8192
+    repeat_text: "shared zeroing context token "
+    repeat_count: 2048
+outputs:
+  - id: short
+    max_tokens: 32
+  - id: moderate
+    max_tokens: 128
+load_regimes: [idle, moderate, near-saturation]
+cache_states: [warm-owner, distributed-warm, cold]
+transports: [tcp]
+epp_replicas: [1]
+suffixes:
+  - "\nCandidate 01: answer independently."
+  - "\nCandidate 02: answer independently."
+  - "\nCandidate 03: answer independently."
+  - "\nCandidate 04: answer independently."
+  - "\nCandidate 05: answer independently."
+  - "\nCandidate 06: answer independently."
+  - "\nCandidate 07: answer independently."
+  - "\nCandidate 08: answer independently."
+  - "\nCandidate 09: answer independently."
+  - "\nCandidate 10: answer independently."
+  - "\nCandidate 11: answer independently."
+  - "\nCandidate 12: answer independently."
+  - "\nCandidate 13: answer independently."
+  - "\nCandidate 14: answer independently."
+  - "\nCandidate 15: answer independently."
+  - "\nCandidate 16: answer independently."

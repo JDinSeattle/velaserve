@@ -1,0 +1,20 @@
+evidenceScope: real_gpu
+routingProfile: arm-b-load-aware-p2p
+eppReplicas: 1
+activeActiveObservation: false
+
+realGPU:
+  replicas: 6
+  minimumReplicas: 6
+  maximumReplicas: 8
+
+simfleet:
+  enabled: false
+  replicas: 6
+
+fanoutbench:
+  enabled: false
+
+images:
+  velaserve:
+    pullPolicy: IfNotPresent

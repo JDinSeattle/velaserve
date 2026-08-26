@@ -5,7 +5,11 @@ helm.sh/chart: {{ printf "%s-%s" .Chart.Name .Chart.Version | quote }}
 {{- end -}}
 
 {{- define "velaserve.image" -}}
+{{- if .Values.images.velaserve.digest -}}
+{{ printf "%s@%s" .Values.images.velaserve.repository .Values.images.velaserve.digest }}
+{{- else -}}
 {{ printf "%s:%s" .Values.images.velaserve.repository .Values.images.velaserve.tag }}
+{{- end -}}
 {{- end -}}
 
 {{- define "velaserve.validate" -}}
@@ -15,5 +19,8 @@ helm.sh/chart: {{ printf "%s-%s" .Chart.Name .Chart.Version | quote }}
 {{- end -}}
 {{- if and (gt (int .Values.eppReplicas) 1) (not .Values.activeActiveObservation) -}}
 {{- fail "eppReplicas > 1 requires activeActiveObservation=true and remains dispersion-only" -}}
+{{- end -}}
+{{- if and (eq .Values.evidenceScope "real_gpu") (not .Values.images.velaserve.digest) -}}
+{{- fail "real_gpu evidence requires images.velaserve.digest with an exact sha256 digest" -}}
 {{- end -}}
 {{- end -}}

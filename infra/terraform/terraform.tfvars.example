@@ -1,0 +1,18 @@
+aws_region          = "us-west-2"
+cluster_name        = "velaserve-z0"
+artifact_bucket_name = "velaserve-z0-artifacts-123456789012-us-west-2"
+gpu_ami_id           = "ami-0123456789abcdef0"
+
+cluster_endpoint_public_access       = true
+cluster_endpoint_public_access_cidrs = ["203.0.113.10/32"]
+
+gpu_instance_types              = ["g6e.xlarge"]
+gpu_desired_size                = 0
+gpu_minimum_benchmark_replicas  = 6
+gpu_maximum_replicas            = 8
+gpu_capacity_type               = "on-demand"
+
+tags = {
+  Owner       = "JDinSeattle"
+  Environment = "z0"
+}
