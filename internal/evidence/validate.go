@@ -80,6 +80,9 @@ func ValidateGroupResult(result GroupResult) error {
 			return err
 		}
 	}
+	if err := validateBenchmarkCell(result.Cell); err != nil {
+		return fmt.Errorf("cell: %w", err)
+	}
 	if err := validateOutcome("outcome", result.Outcome, result.Failure); err != nil {
 		return err
 	}
@@ -95,8 +98,10 @@ func ValidateGroupResult(result GroupResult) error {
 			return fmt.Errorf("children[%d].request_id: duplicate %q", index, child.RequestID)
 		}
 		seen[child.RequestID] = struct{}{}
-		if err := validateEndpointRef(child.Target); err != nil {
-			return fmt.Errorf("children[%d].target: %w", index, err)
+		if child.Target != nil {
+			if err := validateEndpointRef(*child.Target); err != nil {
+				return fmt.Errorf("children[%d].target: %w", index, err)
+			}
 		}
 		if err := finiteNonNegative(fmt.Sprintf("children[%d].ttft_seconds", index), child.TTFTSeconds); err != nil {
 			return err
@@ -110,6 +115,42 @@ func ValidateGroupResult(result GroupResult) error {
 		if err := validateOutcome(fmt.Sprintf("children[%d].outcome", index), child.Outcome, child.Failure); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+func validateBenchmarkCell(cell BenchmarkCell) error {
+	if cell.Repetition == 0 {
+		return fmt.Errorf("repetition: must be positive")
+	}
+	if strings.TrimSpace(cell.PrefixRegime) == "" {
+		return fmt.Errorf("prefix_regime: required")
+	}
+	if cell.PrefixTokens == 0 {
+		return fmt.Errorf("prefix_tokens: must be positive")
+	}
+	if strings.TrimSpace(cell.OutputRegime) == "" {
+		return fmt.Errorf("output_regime: required")
+	}
+	if cell.MaxTokens == 0 {
+		return fmt.Errorf("max_tokens: must be positive")
+	}
+	if _, ok := registeredSkews[cell.ArrivalSkewMS]; !ok {
+		return fmt.Errorf("arrival_skew_ms: %d is not registered", cell.ArrivalSkewMS)
+	}
+	if !isLoadRegime(cell.LoadRegime) {
+		return fmt.Errorf("load_regime: unsupported value %q", cell.LoadRegime)
+	}
+	switch cell.CacheState {
+	case "warm-owner", "distributed-warm", "cold":
+	default:
+		return fmt.Errorf("cache_state: unsupported value %q", cell.CacheState)
+	}
+	if strings.TrimSpace(cell.Transport) == "" {
+		return fmt.Errorf("transport: required")
+	}
+	if cell.EPPReplicas != 1 && cell.EPPReplicas != 2 {
+		return fmt.Errorf("epp_replicas: got %d, want 1 or 2", cell.EPPReplicas)
 	}
 	return nil
 }

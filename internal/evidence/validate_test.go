@@ -1,7 +1,9 @@
 package evidence
 
 import (
+	"encoding/json"
 	"math"
+	"strings"
 	"testing"
 	"time"
 )
@@ -60,6 +62,32 @@ func TestValidateGroupResultRejectsWrongChildCount(t *testing.T) {
 	assertErrorContains(t, ValidateGroupResult(result), "children")
 }
 
+func TestValidateGroupResultRejectsMissingBenchmarkCell(t *testing.T) {
+	result := validGroupResult()
+	result.Cell = BenchmarkCell{}
+	assertErrorContains(t, ValidateGroupResult(result), "cell")
+}
+
+func TestValidateGroupResultAllowsTargetToBeCorrelatedLater(t *testing.T) {
+	result := validGroupResult()
+	result.Children[0].Target = nil
+	if err := ValidateGroupResult(result); err != nil {
+		t.Fatalf("ValidateGroupResult() rejected uncorrelated target: %v", err)
+	}
+}
+
+func TestGroupResultOmitsUnmeasuredRecomputedPrefixTokens(t *testing.T) {
+	result := validGroupResult()
+	result.RecomputedPrefixTokens = nil
+	encoded, err := json.Marshal(result)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(encoded), "recomputed_prefix_tokens") {
+		t.Fatalf("unmeasured result serialized recomputed_prefix_tokens: %s", encoded)
+	}
+}
+
 func validPlacementEvent() PlacementEvent {
 	now := time.Date(2026, 8, 25, 20, 0, 0, 0, time.UTC)
 	return PlacementEvent{
@@ -98,14 +126,28 @@ func validGroupResult() GroupResult {
 		FanoutWidth:             2,
 		MakespanSeconds:         1.5,
 		SlowestChildTTFTSeconds: 0.5,
-		RecomputedPrefixTokens:  4096,
-		Outcome:                 OutcomeSuccess,
+		RecomputedPrefixTokens:  uint64Pointer(4096),
+		Cell: BenchmarkCell{
+			Repetition:    1,
+			PrefixRegime:  "near-crossover",
+			PrefixTokens:  4096,
+			OutputRegime:  "short",
+			MaxTokens:     32,
+			ArrivalSkewMS: 1,
+			LoadRegime:    LoadModerate,
+			CacheState:    "warm-owner",
+			Transport:     "tcp",
+			EPPReplicas:   2,
+		},
+		Outcome: OutcomeSuccess,
 		Children: []ChildResult{
-			{RequestID: "request-01", Target: EndpointRef{ID: "sim-0", Model: "test-model"}, TTFTSeconds: 0.4, LatencySeconds: 1.3, Outcome: OutcomeSuccess},
-			{RequestID: "request-02", Target: EndpointRef{ID: "sim-1", Model: "test-model"}, TTFTSeconds: 0.5, LatencySeconds: 1.5, Outcome: OutcomeSuccess},
+			{RequestID: "request-01", Target: &EndpointRef{ID: "sim-0", Model: "test-model"}, TTFTSeconds: 0.4, LatencySeconds: 1.3, Outcome: OutcomeSuccess},
+			{RequestID: "request-02", Target: &EndpointRef{ID: "sim-1", Model: "test-model"}, TTFTSeconds: 0.5, LatencySeconds: 1.5, Outcome: OutcomeSuccess},
 		},
 	}
 }
+
+func uint64Pointer(value uint64) *uint64 { return &value }
 
 func assertErrorContains(t *testing.T, err error, fragment string) {
 	t.Helper()

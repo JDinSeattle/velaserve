@@ -87,16 +87,31 @@ type PlacementEvent struct {
 }
 
 type ChildResult struct {
-	RequestID      string      `json:"request_id"`
-	Target         EndpointRef `json:"target"`
-	TTFTSeconds    float64     `json:"ttft_seconds"`
-	LatencySeconds float64     `json:"latency_seconds"`
-	OutputTokens   uint64      `json:"output_tokens"`
-	Outcome        Outcome     `json:"outcome"`
-	Failure        string      `json:"failure,omitempty"`
-	DispatchedAt   time.Time   `json:"dispatched_at,omitempty"`
-	FirstTokenAt   time.Time   `json:"first_token_at,omitempty"`
-	CompletedAt    time.Time   `json:"completed_at,omitempty"`
+	RequestID      string       `json:"request_id"`
+	Target         *EndpointRef `json:"target,omitempty"`
+	TTFTSeconds    float64      `json:"ttft_seconds"`
+	LatencySeconds float64      `json:"latency_seconds"`
+	OutputTokens   uint64       `json:"output_tokens"`
+	Outcome        Outcome      `json:"outcome"`
+	Failure        string       `json:"failure,omitempty"`
+	DispatchedAt   *time.Time   `json:"dispatched_at,omitempty"`
+	FirstTokenAt   *time.Time   `json:"first_token_at,omitempty"`
+	CompletedAt    *time.Time   `json:"completed_at,omitempty"`
+}
+
+// BenchmarkCell is the frozen workload coordinate needed to reproduce and
+// pair a group result. Prompt text is intentionally excluded from evidence.
+type BenchmarkCell struct {
+	Repetition    uint32     `json:"repetition"`
+	PrefixRegime  string     `json:"prefix_regime"`
+	PrefixTokens  uint64     `json:"prefix_tokens"`
+	OutputRegime  string     `json:"output_regime"`
+	MaxTokens     uint32     `json:"max_tokens"`
+	ArrivalSkewMS uint32     `json:"arrival_skew_ms"`
+	LoadRegime    LoadRegime `json:"load_regime"`
+	CacheState    string     `json:"cache_state"`
+	Transport     string     `json:"transport"`
+	EPPReplicas   uint32     `json:"epp_replicas"`
 }
 
 type GroupResult struct {
@@ -107,8 +122,9 @@ type GroupResult struct {
 	FanoutWidth             uint32        `json:"fanout_width"`
 	MakespanSeconds         float64       `json:"makespan_seconds"`
 	SlowestChildTTFTSeconds float64       `json:"slowest_child_ttft_seconds"`
-	RecomputedPrefixTokens  uint64        `json:"recomputed_prefix_tokens"`
+	RecomputedPrefixTokens  *uint64       `json:"recomputed_prefix_tokens,omitempty"`
 	EstimatedPrefillSeconds *float64      `json:"estimated_prefill_gpu_seconds,omitempty"`
+	Cell                    BenchmarkCell `json:"cell"`
 	Outcome                 Outcome       `json:"outcome"`
 	Failure                 string        `json:"failure,omitempty"`
 	Children                []ChildResult `json:"children"`

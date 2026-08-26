@@ -350,7 +350,7 @@ Run form:
 ```bash
 go run ./cmd/oracle-replay \
   --placements benchmarks/raw/z0/placements.jsonl \
-  --calibration benchmarks/profiles/local-sim.yaml \
+  --calibration benchmarks/profiles/oracle-local-sim.yaml \
   --output benchmarks/raw/z0/oracle.jsonl
 ```
 

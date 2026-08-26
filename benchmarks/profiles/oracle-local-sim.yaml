@@ -1,0 +1,8 @@
+prefix_tokens: 4096
+inflight_publication_delay_ms: 5
+affinity_load_gate_seconds: 2
+calibration:
+  prefill_tokens_per_second: 1000
+  pull_bytes_per_second: 1000000
+  bytes_per_cached_token: 512
+  service_seconds: 1

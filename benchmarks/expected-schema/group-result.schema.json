@@ -4,7 +4,7 @@
   "title": "VelaServe group result v1",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "run_id", "arm", "group_id", "fanout_width", "makespan_seconds", "slowest_child_ttft_seconds", "recomputed_prefix_tokens", "outcome", "children"],
+  "required": ["schema_version", "run_id", "arm", "group_id", "fanout_width", "makespan_seconds", "slowest_child_ttft_seconds", "cell", "outcome", "children"],
   "properties": {
     "schema_version": {"const": "velaserve.evidence/v1"},
     "run_id": {"type": "string", "minLength": 1},
@@ -15,11 +15,29 @@
     "slowest_child_ttft_seconds": {"type": "number", "minimum": 0},
     "recomputed_prefix_tokens": {"type": "integer", "minimum": 0},
     "estimated_prefill_gpu_seconds": {"type": "number", "minimum": 0},
+    "cell": {"$ref": "#/$defs/benchmarkCell"},
     "outcome": {"enum": ["success", "failure", "cancelled"]},
     "failure": {"type": "string", "minLength": 1},
     "children": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/child"}}
   },
   "$defs": {
+    "benchmarkCell": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repetition", "prefix_regime", "prefix_tokens", "output_regime", "max_tokens", "arrival_skew_ms", "load_regime", "cache_state", "transport", "epp_replicas"],
+      "properties": {
+        "repetition": {"type": "integer", "minimum": 1},
+        "prefix_regime": {"type": "string", "minLength": 1},
+        "prefix_tokens": {"type": "integer", "minimum": 1},
+        "output_regime": {"type": "string", "minLength": 1},
+        "max_tokens": {"type": "integer", "minimum": 1},
+        "arrival_skew_ms": {"enum": [0, 1, 5, 20]},
+        "load_regime": {"enum": ["idle", "moderate", "near-saturation"]},
+        "cache_state": {"enum": ["warm-owner", "distributed-warm", "cold"]},
+        "transport": {"type": "string", "minLength": 1},
+        "epp_replicas": {"enum": [1, 2]}
+      }
+    },
     "endpointRef": {
       "type": "object",
       "additionalProperties": false,
@@ -29,7 +47,7 @@
     "child": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["request_id", "target", "ttft_seconds", "latency_seconds", "output_tokens", "outcome"],
+      "required": ["request_id", "ttft_seconds", "latency_seconds", "output_tokens", "outcome"],
       "properties": {
         "request_id": {"type": "string", "minLength": 1},
         "target": {"$ref": "#/$defs/endpointRef"},
@@ -45,4 +63,3 @@
     }
   }
 }
-

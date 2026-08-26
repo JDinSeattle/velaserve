@@ -7,6 +7,18 @@
   "makespan_seconds": 1.5,
   "slowest_child_ttft_seconds": 0.5,
   "recomputed_prefix_tokens": 4096,
+  "cell": {
+    "repetition": 1,
+    "prefix_regime": "near-crossover",
+    "prefix_tokens": 4096,
+    "output_regime": "short",
+    "max_tokens": 32,
+    "arrival_skew_ms": 1,
+    "load_regime": "moderate",
+    "cache_state": "warm-owner",
+    "transport": "tcp",
+    "epp_replicas": 2
+  },
   "outcome": "success",
   "children": [
     {
@@ -27,4 +39,3 @@
     }
   ]
 }
-
