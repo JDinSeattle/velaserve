@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/JDinSeattle/velaserve/schemas/placement-event-v1.json",
+  "title": "VelaServe placement event v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "run_id", "arm", "group_id", "request_id", "fanout_width", "arrival_skew_ms", "epp_replicas", "load_regime", "snapshot", "target", "observed_at"],
+  "properties": {
+    "schema_version": {"const": "velaserve.evidence/v1"},
+    "run_id": {"type": "string", "minLength": 1},
+    "arm": {"enum": ["arm-a-affinity-p2p", "arm-b-load-aware-p2p", "arm-c-velaserve-placement-p2p", "arm-d-load-aware-no-p2p", "arm-e-source-control-p2p"]},
+    "group_id": {"type": "string", "minLength": 1},
+    "request_id": {"type": "string", "minLength": 1},
+    "fanout_width": {"enum": [2, 4, 8, 16]},
+    "arrival_skew_ms": {"enum": [0, 1, 5, 20]},
+    "epp_replicas": {"enum": [1, 2]},
+    "load_regime": {"enum": ["idle", "moderate", "near-saturation"]},
+    "snapshot": {"$ref": "#/$defs/snapshot"},
+    "target": {"$ref": "#/$defs/endpointRef"},
+    "observed_at": {"type": "string", "format": "date-time"},
+    "attributes": {"type": "object", "additionalProperties": {"type": "string"}}
+  },
+  "$defs": {
+    "endpointRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "model"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "model": {"type": "string", "minLength": 1},
+        "zone": {"type": "string"}
+      }
+    },
+    "prefixSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source", "cached_tokens", "transfer_bytes"],
+      "properties": {
+        "source": {"$ref": "#/$defs/endpointRef"},
+        "cached_tokens": {"type": "integer", "minimum": 0},
+        "transfer_bytes": {"type": "integer", "minimum": 0}
+      }
+    },
+    "endpointState": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ref", "healthy", "compatible", "available_at_seconds", "queue_depth", "running_requests", "local_prefix_tokens", "observed_inflight"],
+      "properties": {
+        "ref": {"$ref": "#/$defs/endpointRef"},
+        "healthy": {"type": "boolean"},
+        "compatible": {"type": "boolean"},
+        "available_at_seconds": {"type": "number", "minimum": 0},
+        "queue_depth": {"type": "integer", "minimum": 0},
+        "running_requests": {"type": "integer", "minimum": 0},
+        "local_prefix_tokens": {"type": "integer", "minimum": 0},
+        "observed_inflight": {"type": "integer", "minimum": 0},
+        "inflight_published_at": {"type": "string", "format": "date-time"},
+        "p2p_sources": {"type": "array", "items": {"$ref": "#/$defs/prefixSource"}}
+      }
+    },
+    "snapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["observed_at", "endpoints"],
+      "properties": {
+        "observed_at": {"type": "string", "format": "date-time"},
+        "endpoints": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/endpointState"}}
+      }
+    }
+  }
+}
+

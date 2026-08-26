@@ -1,0 +1,22 @@
+schema_version: velaserve.versions/v1
+frozen_at: 2026-08-26T06:00:00Z
+go:
+  version: 1.26.6
+upstreams:
+  llm_d_router:
+    repository: https://github.com/llm-d/llm-d-router.git
+    commit: ab723b898f8598ab6631e9848a4cf28accd9b9ea
+    delivery: source-build
+  llm_d:
+    repository: https://github.com/llm-d/llm-d.git
+    commit: 3243fcf1191348b55c7811267a98117f8b7a6910
+    delivery: manifests-at-commit
+  llm_d_kv_cache:
+    repository: https://github.com/llm-d/llm-d-kv-cache.git
+    commit: 8cf43067afb7fc9fefafc1b64de063c769f2c90f
+    delivery: source-build
+  vllm:
+    repository: https://github.com/vllm-project/vllm.git
+    commit: b1fbbc2ade51e3826bc92e4733c9c692ee21d42d
+    delivery: source-build
+

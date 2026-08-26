@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/JDinSeattle/velaserve/schemas/gate-decision-v1.json",
+  "title": "VelaServe gate decision v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "decision_id", "preregistration_sha256", "artifact_ledger_sha256", "threshold", "confidence", "branch", "qualifying_widths", "evidence", "decided_at"],
+  "properties": {
+    "schema_version": {"const": "velaserve.evidence/v1"},
+    "decision_id": {"type": "string", "minLength": 1},
+    "preregistration_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "artifact_ledger_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "threshold": {"const": 0.1},
+    "confidence": {"const": 0.95},
+    "branch": {"enum": ["placement", "source-pressure", "negative-result", "insufficient-evidence"]},
+    "qualifying_widths": {"type": "array", "items": {"enum": [2, 4, 8, 16]}, "uniqueItems": true},
+    "evidence": {"type": "array", "items": {"$ref": "#/$defs/cell"}},
+    "decided_at": {"type": "string", "format": "date-time"}
+  },
+  "$defs": {
+    "interval": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["estimate", "lower", "upper"],
+      "properties": {"estimate": {"type": "number"}, "lower": {"type": "number"}, "upper": {"type": "number"}}
+    },
+    "cell": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["fanout_width", "load_regime", "prefix_regime", "transport", "metric", "pairs", "improvement"],
+      "properties": {
+        "fanout_width": {"enum": [2, 4, 8, 16]},
+        "load_regime": {"enum": ["idle", "moderate", "near-saturation"]},
+        "prefix_regime": {"type": "string", "minLength": 1},
+        "transport": {"type": "string", "minLength": 1},
+        "metric": {"type": "string", "minLength": 1},
+        "pairs": {"type": "integer", "minimum": 20},
+        "improvement": {"$ref": "#/$defs/interval"}
+      }
+    }
+  }
+}
+

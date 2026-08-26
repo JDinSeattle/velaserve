@@ -1,0 +1,14 @@
+.DS_Store
+.cache/
+.tools/
+bin/
+coverage/
+dist/
+*.private.key
+*.tfstate
+*.tfstate.*
+.terraform/
+terraform.tfvars
+benchmarks/raw/**
+!benchmarks/raw/.gitkeep
+
