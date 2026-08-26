@@ -31,6 +31,9 @@ func TestExpandProfileCoversFrozenWidthsAndSkewsDeterministically(t *testing.T) 
 		if request.Cell.PrefixRegime == "" || request.Cell.Repetition != 1 {
 			t.Fatalf("missing workload coordinate: %#v", request.Cell)
 		}
+		if request.RunID != "local-z0" {
+			t.Fatalf("group escaped experiment run identity: %q", request.RunID)
+		}
 	}
 	if !reflect.DeepEqual(seenWidths, map[int]bool{2: true, 4: true, 8: true, 16: true}) {
 		t.Fatalf("widths = %v", seenWidths)

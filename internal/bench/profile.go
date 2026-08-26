@@ -117,9 +117,8 @@ func ExpandProfile(profile Profile) ([]GroupRequest, error) {
 										cellIndex++
 										arms := orderedArms(profile.Seed, cellIndex, profile.Arms)
 										for _, arm := range arms {
-											runID := fmt.Sprintf("%s-%08d", profile.RunIDPrefix, len(requests)+1)
 											requests = append(requests, GroupRequest{
-												RunID:        runID,
+												RunID:        profile.RunIDPrefix,
 												Arm:          arm,
 												Model:        profile.Model,
 												CommonPrefix: renderedPrefix,
