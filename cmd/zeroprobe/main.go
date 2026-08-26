@@ -51,6 +51,7 @@ func run(ctx context.Context, args []string) (any, error) {
 	endpoint := flags.String("endpoint", os.Getenv("VELASERVE_ENDPOINT"), "OpenAI-compatible endpoint; or set VELASERVE_ENDPOINT")
 	limit := flags.Uint64("limit", 0, "partial smoke limit; zero runs the complete matrix")
 	maxEventBytes := flags.Int("max-event-bytes", 8<<20, "maximum bytes in one SSE event")
+	simulator := flags.Bool("simulator", false, "enable X-Sim metadata and target correlation; never use for cloud runs")
 	if err := flags.Parse(args); err != nil {
 		return nil, err
 	}
@@ -64,6 +65,7 @@ func run(ctx context.Context, args []string) (any, error) {
 		Endpoint:             *endpoint,
 		Limit:                *limit,
 		MaxEventBytes:        *maxEventBytes,
+		SimulatorMode:        *simulator,
 	})
 }
 
@@ -80,10 +82,11 @@ func analyze(args []string) error {
 	flags := flag.NewFlagSet("analyze", flag.ContinueOnError)
 	artifactRoot := flags.String("artifact-root", "", "artifact bundle directory")
 	calibration := flags.String("calibration", "benchmarks/profiles/oracle-local-sim.yaml", "frozen oracle calibration YAML")
+	evidenceScope := flags.String("evidence-scope", "simulation_only", "simulation_only or real_gpu")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
-	return zeroprobe.Analyze(zeroprobe.AnalyzeOptions{ArtifactRoot: *artifactRoot, CalibrationPath: *calibration})
+	return zeroprobe.Analyze(zeroprobe.AnalyzeOptions{ArtifactRoot: *artifactRoot, CalibrationPath: *calibration, EvidenceScope: *evidenceScope})
 }
 
 func verify(args []string) error {

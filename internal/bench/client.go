@@ -23,11 +23,19 @@ import (
 
 const maxErrorBodyBytes = 64 << 10
 
+const (
+	HeaderSimulatorArm           = "X-Sim-Arm"
+	HeaderSimulatorSlot          = "X-Sim-Slot"
+	HeaderSimulatorArrivalSkewMS = "X-Sim-Arrival-Skew-Ms"
+	HeaderSimulatorTarget        = "X-Sim-Target"
+)
+
 type Client struct {
 	Endpoint      string
 	HTTPClient    *http.Client
 	MaxEventBytes int
 	Now           func() time.Time
+	SimulatorMode bool
 }
 
 type GroupRequest struct {
@@ -190,6 +198,11 @@ func (client Client) runChild(
 	}
 	httpRequest.Header.Set("Content-Type", "application/json")
 	httpRequest.Header.Set("Accept", "text/event-stream")
+	if client.SimulatorMode {
+		httpRequest.Header.Set(HeaderSimulatorArm, string(groupRequest.Arm))
+		httpRequest.Header.Set(HeaderSimulatorSlot, fmt.Sprintf("%d", slot))
+		httpRequest.Header.Set(HeaderSimulatorArrivalSkewMS, fmt.Sprintf("%d", groupRequest.Cell.ArrivalSkewMS))
+	}
 
 	response, err := client.httpClient().Do(httpRequest)
 	if err != nil {
@@ -216,6 +229,14 @@ func (client Client) runChild(
 	if mediaType := response.Header.Get("Content-Type"); !strings.Contains(strings.ToLower(mediaType), "text/event-stream") {
 		return failureAt(requestID, fmt.Errorf("OpenAI response content type %q is not text/event-stream", mediaType), dispatchedAt, client.now(), false)
 	}
+	var target *evidence.EndpointRef
+	if client.SimulatorMode {
+		targetID := strings.TrimSpace(response.Header.Get(HeaderSimulatorTarget))
+		if targetID == "" {
+			return failureAt(requestID, fmt.Errorf("simulator response omitted %s", HeaderSimulatorTarget), dispatchedAt, client.now(), false)
+		}
+		target = &evidence.EndpointRef{ID: targetID, Model: groupRequest.Model}
+	}
 
 	stream, err := openaiwire.ReadStream(response.Body, openaiwire.StreamOptions{
 		StartedAt:     dispatchedAt,
@@ -232,6 +253,7 @@ func (client Client) runChild(
 	}
 	return evidence.ChildResult{
 		RequestID:      requestID,
+		Target:         target,
 		TTFTSeconds:    stream.TTFT.Seconds(),
 		LatencySeconds: stream.Latency.Seconds(),
 		OutputTokens:   stream.OutputTokens,

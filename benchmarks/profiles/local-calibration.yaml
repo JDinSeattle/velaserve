@@ -1,0 +1,39 @@
+schema_version: velaserve.benchmark-profile/v1
+seed: 20260825
+run_id_prefix: local-zeroing
+model: velaserve-simulator
+max_width: 16
+timeout_ms: 2000
+repetitions: 1
+widths: [2, 4, 8, 16]
+arrival_skews_ms: [0, 1, 5, 20]
+arms: [arm-a-affinity-p2p, arm-b-load-aware-p2p]
+prefixes:
+  - id: near-simulated-crossover
+    estimated_tokens: 4096
+    repeat_text: "shared simulated context "
+    repeat_count: 64
+outputs:
+  - id: short
+    max_tokens: 8
+load_regimes: [moderate]
+cache_states: [warm-owner]
+transports: [tcp]
+epp_replicas: [1]
+suffixes:
+  - "\nCandidate 01"
+  - "\nCandidate 02"
+  - "\nCandidate 03"
+  - "\nCandidate 04"
+  - "\nCandidate 05"
+  - "\nCandidate 06"
+  - "\nCandidate 07"
+  - "\nCandidate 08"
+  - "\nCandidate 09"
+  - "\nCandidate 10"
+  - "\nCandidate 11"
+  - "\nCandidate 12"
+  - "\nCandidate 13"
+  - "\nCandidate 14"
+  - "\nCandidate 15"
+  - "\nCandidate 16"

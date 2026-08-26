@@ -15,6 +15,7 @@ import (
 	"github.com/JDinSeattle/velaserve/internal/bench"
 	"github.com/JDinSeattle/velaserve/internal/evidence"
 	"github.com/JDinSeattle/velaserve/internal/jsonl"
+	gate "github.com/JDinSeattle/velaserve/research/gate-decision"
 	replay "github.com/JDinSeattle/velaserve/research/oracle-replay"
 	placementrecorder "github.com/JDinSeattle/velaserve/research/placement-recorder"
 )
@@ -27,6 +28,7 @@ type RunOptions struct {
 	Endpoint             string
 	Limit                uint64
 	MaxEventBytes        int
+	SimulatorMode        bool
 }
 
 type RunCompletion struct {
@@ -46,6 +48,16 @@ type RunCompletion struct {
 type AnalyzeOptions struct {
 	ArtifactRoot    string
 	CalibrationPath string
+	EvidenceScope   string
+}
+
+const AnalysisReportSchemaVersion = "velaserve.analysis-report/v1"
+
+type AnalysisReport struct {
+	SchemaVersion string                `json:"schema_version"`
+	EvidenceScope string                `json:"evidence_scope"`
+	GatePreview   evidence.GateDecision `json:"gate_preview"`
+	Signed        bool                  `json:"signed"`
 }
 
 func Run(ctx context.Context, options RunOptions) (RunCompletion, error) {
@@ -95,7 +107,7 @@ func Run(ctx context.Context, options RunOptions) (RunCompletion, error) {
 		SelectedGroups:         uint64(len(requests)),
 	}
 	groupsPath := filepath.Join(root, "groups.jsonl")
-	client := bench.Client{Endpoint: options.Endpoint, MaxEventBytes: options.MaxEventBytes}
+	client := bench.Client{Endpoint: options.Endpoint, MaxEventBytes: options.MaxEventBytes, SimulatorMode: options.SimulatorMode}
 	for _, request := range requests {
 		request.RunID = manifest.RunID
 		result, runErr := client.RunGroup(ctx, request)
@@ -211,6 +223,50 @@ func Analyze(options AnalyzeOptions) error {
 			return err
 		}
 	}
+	if options.EvidenceScope != "simulation_only" && options.EvidenceScope != "real_gpu" {
+		return fmt.Errorf("evidence scope must be simulation_only or real_gpu")
+	}
+	manifestBytes, err := os.ReadFile(filepath.Join(root, "manifest.json"))
+	if err != nil {
+		return err
+	}
+	var manifest Manifest
+	if err := json.Unmarshal(manifestBytes, &manifest); err != nil {
+		return err
+	}
+	ledgerHash, err := sha256File(filepath.Join(root, artifacts.LedgerName))
+	if err != nil {
+		return err
+	}
+	preview, err := gate.Decide(gate.DecisionInput{
+		DecisionID:            "preview-" + manifest.RunID,
+		PreregistrationSHA256: manifest.PreregistrationSHA256,
+		ArtifactLedgerSHA256:  ledgerHash,
+		Threshold:             0.10,
+		Confidence:            0.95,
+		EvidenceComplete:      false,
+		DecidedAt:             time.Now().UTC(),
+	})
+	if err != nil {
+		return err
+	}
+	report := AnalysisReport{
+		SchemaVersion: AnalysisReportSchemaVersion,
+		EvidenceScope: options.EvidenceScope,
+		GatePreview:   preview,
+		Signed:        false,
+	}
+	reportBytes, err := json.MarshalIndent(report, "", "  ")
+	if err != nil {
+		return err
+	}
+	reportBytes = append(reportBytes, '\n')
+	if err := writeExclusive(filepath.Join(root, "analysis-report.json"), reportBytes); err != nil {
+		return err
+	}
+	if _, err := artifacts.Record(root, "analysis-report.json"); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -269,6 +325,20 @@ func Verify(root string) error {
 	if !fileExists(filepath.Join(resolved, "oracle.jsonl")) {
 		return fmt.Errorf("oracle.jsonl is required before verification")
 	}
+	reportBytes, err := os.ReadFile(filepath.Join(resolved, "analysis-report.json"))
+	if err != nil {
+		return fmt.Errorf("analysis-report.json is required before verification: %w", err)
+	}
+	var report AnalysisReport
+	if err := json.Unmarshal(reportBytes, &report); err != nil {
+		return fmt.Errorf("decode analysis report: %w", err)
+	}
+	if report.SchemaVersion != AnalysisReportSchemaVersion || report.Signed || report.GatePreview.Branch != evidence.BranchInsufficientEvidence {
+		return fmt.Errorf("analysis report must contain an unsigned insufficient-evidence preview")
+	}
+	if report.EvidenceScope != "simulation_only" && report.EvidenceScope != "real_gpu" {
+		return fmt.Errorf("analysis report has invalid evidence scope %q", report.EvidenceScope)
+	}
 	return nil
 }
 
@@ -303,4 +373,13 @@ func validateSourceFile(path string) error {
 func fileExists(path string) bool {
 	info, err := os.Stat(path)
 	return err == nil && info.Mode().IsRegular()
+}
+
+func sha256File(path string) (string, error) {
+	contents, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	hash := sha256.Sum256(contents)
+	return hex.EncodeToString(hash[:]), nil
 }
