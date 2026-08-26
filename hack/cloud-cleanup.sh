@@ -1,14 +1,18 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+readonly REPOSITORY_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+readonly HELM="${HELM:-${REPOSITORY_ROOT}/.tools/bin/helm}"
+
 require_env() {
   local name="$1"
   [[ -n "${!name:-}" ]] || { echo "cloud-cleanup: $name is required" >&2; exit 1; }
 }
 
-for command_name in aws kubectl jq helm; do
+for command_name in aws kubectl jq; do
   command -v "$command_name" >/dev/null 2>&1 || { echo "cloud-cleanup: $command_name is required" >&2; exit 1; }
 done
+[[ -x "$HELM" ]] || { echo "cloud-cleanup: pinned Helm is required at $HELM; run hack/bootstrap-tools.sh or set HELM" >&2; exit 1; }
 
 for variable_name in \
   VELASERVE_CLUSTER_NAME \
@@ -37,8 +41,8 @@ aws s3api head-object \
   --region "$VELASERVE_AWS_REGION" >/dev/null
 
 for release_name in velaserve-support velaserve; do
-  if helm --namespace "$VELASERVE_NAMESPACE" status "$release_name" >/dev/null 2>&1; then
-    helm --namespace "$VELASERVE_NAMESPACE" uninstall "$release_name"
+  if "$HELM" --namespace "$VELASERVE_NAMESPACE" status "$release_name" >/dev/null 2>&1; then
+    "$HELM" --namespace "$VELASERVE_NAMESPACE" uninstall "$release_name"
   fi
 done
 kubectl --namespace "$VELASERVE_NAMESPACE" delete jobs -l app.kubernetes.io/part-of=velaserve --ignore-not-found=true

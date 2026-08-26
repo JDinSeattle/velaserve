@@ -61,7 +61,11 @@ func TestCloudScriptsDeclareEveryNonShellRuntimeDependency(t *testing.T) {
 	checks := map[string][]string{
 		"cloud-run-z0.sh":  {"command -v go"},
 		"cloud-collect.sh": {"for command_name in aws kubectl jq go shasum curl find"},
-		"cloud-cleanup.sh": {"for command_name in aws kubectl jq helm"},
+		"cloud-cleanup.sh": {
+			"readonly HELM=\"${HELM:-${REPOSITORY_ROOT}/.tools/bin/helm}\"",
+			"for command_name in aws kubectl jq",
+			"\"$HELM\" --namespace",
+		},
 	}
 	for script, required := range checks {
 		contents := readRepositoryFile(t, "hack", script)

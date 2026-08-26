@@ -74,6 +74,9 @@ func ReadStream(reader io.Reader, options StreamOptions) (StreamResult, error) {
 		eventBytes = 0
 		eventAt := options.Clock.Now().UTC()
 		if bytes.Equal(bytes.TrimSpace(payload), []byte("[DONE]")) {
+			if result.FirstTokenAt == nil {
+				return false, fmt.Errorf("OpenAI stream reached [DONE] before semantic output")
+			}
 			result.Latency = nonNegativeDuration(eventAt.Sub(options.StartedAt))
 			result.CompletedAt = eventAt
 			result.Text = text.String()

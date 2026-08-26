@@ -20,7 +20,7 @@ The repository profile expands deterministically and uses fixed sibling suffixes
 
 ## Streaming measurement
 
-Each sibling is an independent OpenAI-compatible streaming request. A child is successful only after valid SSE framing, at least one content event, and terminal `[DONE]`. Usage-only chunks are accepted but do not define TTFT. The client bounds event size and total request duration, records the first content timestamp, drains terminal state, and preserves failure or cancellation.
+Each sibling is an independent OpenAI-compatible streaming request. A child is successful only after valid SSE framing, at least one semantic text or tool-call delta, and terminal `[DONE]`. Role-only and usage-only chunks do not define TTFT. The client bounds event size and total request duration, records the first semantic-output timestamp, drains terminal state, and preserves failure or cancellation.
 
 - **Child TTFT:** dispatch to first content token.
 - **Child latency:** dispatch to terminal stream outcome.

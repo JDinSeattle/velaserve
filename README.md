@@ -11,7 +11,7 @@ No production placement or source-pressure mechanism has been implemented. Stage
 ## What exists now
 
 - A preregistered Z0-A/B/C experiment with immutable upstream Git SHAs and a fixed 10% practical-significance threshold.
-- A Go best-of-N streaming client that validates OpenAI-compatible SSE through `[DONE]` and records every child, including failures and cancellations.
+- A Go best-of-N streaming client that validates OpenAI-compatible SSE through semantic output and `[DONE]`, and records every child, including failures and cancellations.
 - An eight-endpoint deterministic simulator for pipeline calibration only. Simulator output is always `simulation_only` evidence.
 - A deterministic N-aware offline oracle that evaluates local hit, P2P pull, and recompute cost against the same endpoint snapshots as the upstream arms.
 - Envoy/EPP record correlation, append-only SHA-256 artifact ledgers, paired bootstrap confidence intervals, and a signed-decision command.

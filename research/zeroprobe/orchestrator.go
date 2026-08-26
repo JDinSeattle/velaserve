@@ -134,6 +134,9 @@ func Run(ctx context.Context, options RunOptions) (RunCompletion, error) {
 	if completion.Failure == "" && completion.SelectedGroups != completion.ExpectedGroups {
 		completion.Failure = "partial smoke limit selected"
 	}
+	if completion.Failure == "" && (completion.FailedGroups > 0 || completion.CancelledGroups > 0) {
+		completion.Failure = fmt.Sprintf("%d failed groups and %d cancelled groups", completion.FailedGroups, completion.CancelledGroups)
+	}
 	completion.Complete = completion.Failure == "" && completion.PersistedGroups == completion.SelectedGroups
 	completion.CompletedAt = time.Now().UTC()
 	if _, err := os.Stat(groupsPath); err == nil {

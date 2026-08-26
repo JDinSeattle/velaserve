@@ -63,6 +63,18 @@ func TestReadStreamRejectsEOFBeforeDone(t *testing.T) {
 	}
 }
 
+func TestReadStreamRejectsDoneWithoutSemanticOutput(t *testing.T) {
+	start := time.Now()
+	stream := strings.NewReader("data: {\"choices\":[{\"delta\":{\"role\":\"assistant\"}}]}\n\n" +
+		"data: {\"choices\":[],\"usage\":{\"completion_tokens\":0}}\n\n" +
+		"data: [DONE]\n\n")
+	clock := &sequenceClock{times: []time.Time{start, start.Add(time.Millisecond), start.Add(2 * time.Millisecond)}}
+	_, err := ReadStream(stream, StreamOptions{StartedAt: start, Clock: clock, MaxEventBytes: 1024})
+	if err == nil || !strings.Contains(err.Error(), "before semantic output") {
+		t.Fatalf("ReadStream() error = %v", err)
+	}
+}
+
 func TestReadStreamRejectsOversizedEvent(t *testing.T) {
 	start := time.Now()
 	stream := strings.NewReader("data: {\"choices\":[{\"delta\":{\"content\":\"too large\"}}]}\n\n")
