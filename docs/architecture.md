@@ -1,0 +1,65 @@
+# Architecture
+
+## Current Stage-1 data path
+
+```text
+fanoutbench
+  | OpenAI-compatible streaming requests; declared group ID, request ID, N
+  v
+Envoy Gateway / Gateway API Inference Extension
+  v
+pinned upstream llm-d EPP (Arm A or Arm B)
+  v
+homogeneous model endpoints (local simfleet or operator-deployed vLLM)
+
+groups.jsonl + normalized Envoy/EPP JSONL
+  v
+placement-recorder -> placements.jsonl + unmatched.jsonl
+  v
+offline replay (observed Arm B and N-aware oracle)
+  v
+paired statistics -> unsigned decision -> Ed25519-signed gate artifact
+```
+
+The online request path contains only upstream routing. The N-aware planner is offline research code: it cannot select a live endpoint, create distributed state, or alter an inference request. That separation is the central Stage-1 safety boundary.
+
+## Components
+
+| Component | Role | Evidence boundary |
+|---|---|---|
+| `fanoutbench` | Sends N sibling streams with deterministic IDs/skew and waits for all terminal outcomes | Records child TTFT, latency, completion, usage, and group makespan |
+| `simfleet` | Models eight deterministic endpoints and emits normalized routing records | Always labeled `simulation_only`; not a performance proxy |
+| llm-d EPP | Runs frozen precise-affinity + P2P or load-aware + P2P profiles | Built from the exact commit in `versions.lock.yaml` |
+| `placement-recorder` | Joins request/group IDs across result, Envoy, and EPP records | Preserves unmatched inputs instead of inventing a target |
+| N-aware oracle | Evaluates feasible endpoint allocation from the observed snapshot | Prediction depends on a hashed, operator-supplied calibration |
+| gate analyzer | Applies fixed pairing, confidence, threshold, and adjacency rules | Incomplete evidence can only produce `insufficient-evidence` |
+| artifact ledger | Records a canonical relative path, byte count, SHA-256, and timestamp | Duplicate paths, traversal, symlinks, and later mutation fail verification |
+
+## Routing arms
+
+- **Arm A — affinity + P2P:** pinned upstream precise-prefix affinity plus load gates and peer KV source selection.
+- **Arm B — load-aware + P2P:** pinned upstream load-aware target selection plus the same peer KV capability. This is the preregistered placement comparator.
+- **Arm D — load-aware without P2P:** control arm for measuring the value of peer reuse.
+- **Offline oracle:** deterministic N-aware assignment over the same snapshot. It is not an online arm.
+
+The chart permits only the two Stage-1 upstream routing profiles. A second EPP replica is allowed solely for dispersion observation and carries an explicit warning that EPP-local state is not synchronized.
+
+## Local topology
+
+`hack/kind-up.sh` creates the exact `velaserve-z0` Kind cluster, builds the pinned EPP from source, installs pinned Envoy Gateway and Gateway API Inference Extension manifests, deploys eight simulator pods, and verifies a full SSE response through the EPP service. Scratch images contain only statically linked binaries. The local chart runs non-root, drops capabilities, disables service-account token mounting, and uses a read-only root filesystem.
+
+## AWS handoff topology
+
+Terraform describes a dedicated VPC, private worker subnets, EKS, a two-node CPU system group, Karpenter, immutable ECR repositories, an encrypted/versioned S3 evidence bucket, and Pod Identity scoped to `runs/*`. The GPU NodePool is scale-to-zero and bounded to six through eight GPUs for the real benchmark.
+
+The operator owns the model deployment. It must expose six to eight homogeneous vLLM pods with label `app.kubernetes.io/name=velaserve-model`, service `velaserve-model` on port 8000, an immutable model revision, and digest-addressed images. `aws-z0-values.yaml` disables simfleet and points the EPP only at that declared service/selector.
+
+## Conditional future branch
+
+Only a verified, signed real-GPU decision may authorize one of these mutually exclusive plans:
+
+1. `placement`: design active-active-safe group plans and slot claiming.
+2. `source-pressure`: leave target placement upstream and design only the smallest measured pull-pressure control.
+3. `negative-result`: implement neither mechanism and publish the boundary.
+
+The future design is intentionally not present in current production code.
