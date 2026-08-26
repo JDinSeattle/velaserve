@@ -28,6 +28,17 @@ func TestCorrelateRequiresRequestAndGroupIdentity(t *testing.T) {
 	}
 }
 
+func TestParseEPPNormalizesPinnedObserverLogPrefix(t *testing.T) {
+	line := `2026-08-26T01:00:00Z epp VELASERVE_EPP_RECORD {"schema_version":"velaserve.epp-scheduling/v1","request_id":"request-1","group_id":"group-123456789012","observed_at":"2026-08-26T01:00:00Z","snapshot":{"observed_at":"2026-08-26T01:00:00Z","endpoints":[{"ref":{"id":"pod-a","model":"model"},"healthy":true,"compatible":true,"available_at_seconds":0,"queue_depth":1,"running_requests":2,"local_prefix_tokens":4096,"observed_inflight":2}]},"target":{"id":"pod-a","model":"model"}}`
+	record, err := ParseEPP([]byte(line))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if record.RequestID != "request-1" || record.Target.ID != "pod-a" || record.Snapshot.Endpoints[0].RunningRequests != 2 {
+		t.Fatalf("record = %#v", record)
+	}
+}
+
 func TestIngestReportsEveryUnmatchedLine(t *testing.T) {
 	root := t.TempDir()
 	writeJSONLines(t, filepath.Join(root, "groups.jsonl"), recorderGroupResult())

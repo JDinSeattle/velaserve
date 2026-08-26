@@ -76,6 +76,21 @@ func TestValidateGroupResultAllowsTargetToBeCorrelatedLater(t *testing.T) {
 	}
 }
 
+func TestValidateGroupResultRejectsTamperedConditionObservedState(t *testing.T) {
+	result := validGroupResult()
+	result.Condition = &ConditionAttestation{
+		SchemaVersion: ConditionAttestationSchemaVersion,
+		RunID:         result.RunID, GroupID: result.GroupID, LoadRegime: result.Cell.LoadRegime, CacheState: result.Cell.CacheState,
+		ControllerRevision: strings.Repeat("a", 40), ObservedState: ConditionObservedState{OfferedLoadQPS: 50, AchievedLoadQPS: 50, SaturationQPS: 100, CachedEndpointIDs: []string{"model-0"}, MeasurementSource: "driver"}, AppliedAt: time.Now().UTC(),
+	}
+	result.Condition.StateSHA256 = conditionStateSHA256(*result.Condition)
+	if err := ValidateGroupResult(result); err != nil {
+		t.Fatalf("ValidateGroupResult() rejected bound condition state: %v", err)
+	}
+	result.Condition.ObservedState.AchievedLoadQPS = 40
+	assertErrorContains(t, ValidateGroupResult(result), "state SHA-256")
+}
+
 func TestGroupResultOmitsUnmeasuredRecomputedPrefixTokens(t *testing.T) {
 	result := validGroupResult()
 	result.RecomputedPrefixTokens = nil

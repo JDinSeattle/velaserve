@@ -4,11 +4,13 @@ Stage 1 avoids mutable distributed coordination. Its consistency problem is narr
 
 ## Frozen inputs
 
-`research/preregistration/z0-v1.yaml` fixes the seed, widths, arrival skews, EPP replica counts, arms, exclusions, thresholds, bootstrap settings, and four upstream commit SHAs. A run copies this file and the expanded benchmark profile into its artifact directory and records their hashes before requests begin. Cloud preflight compares the preregistration and calibration hashes to operator-provided expected values and checks Git-tracked inputs against `HEAD`.
+`research/preregistration/z0-v1.yaml` fixes the seed, widths, arrival skews, EPP replica counts, arms, exclusions, thresholds, bootstrap settings, and four upstream commit SHAs. A run copies this file and the expanded benchmark profile into its artifact directory and records their hashes before requests begin. Cloud preflight compares the preregistration and calibration hashes to operator-provided expected values and checks Git-tracked inputs against `HEAD`. A real-GPU run additionally records `preflight-binding.json`: the checked-out/controller commit, exact digest-addressed images, model revision, active arm, EPP count, restart-free pod UIDs, homogeneous GPU-node identities, transport, and both input hashes. The gate compiler requires one invariant binding across all submitted bundles.
 
 ## Identity and correlation
 
 Every group has a run ID and group ID; every sibling has a request ID. The same IDs flow through request headers, group results, Envoy access records, EPP observations, placement events, and oracle records. The recorder joins on those stable IDs. Ambiguous, malformed, duplicated, or absent correlations are written to `unmatched.jsonl`; they are not coerced into a placement.
+
+Before each real group, the condition controller invokes the operator's environment driver. The resulting non-empty observed-state object is stored with the group; its load/cache/source-count labels, full payload, controller revision, timestamp, and SHA-256 must agree. A changed payload or a receipt from another controller revision invalidates the bundle.
 
 Each group result contains one terminal child record per declared width. Failed and cancelled children retain their reason and timing. The run-completion record distinguishes expected, selected, persisted, failed, and cancelled counts. A limited smoke run is explicitly incomplete and cannot be promoted into complete gate evidence.
 

@@ -75,6 +75,7 @@ func compileSchemas(schemaDir string) (map[string]*jsonschema.Schema, error) {
 		"placement": "placement-event.schema.json",
 		"group":     "group-result.schema.json",
 		"gate":      "gate-decision.schema.json",
+		"preflight": "preflight-binding.schema.json",
 	}
 	compiled := make(map[string]*jsonschema.Schema, len(files))
 	for kind, name := range files {

@@ -21,7 +21,7 @@ case "$arm" in
   *) echo "usage: hack/kind-up.sh [arm-a|arm-b]" >&2; exit 2 ;;
 esac
 
-for required in docker kubectl curl; do
+for required in docker kubectl curl jq tar git; do
   if ! command -v "$required" >/dev/null 2>&1; then
     echo "$required is required" >&2
     exit 1
@@ -55,7 +55,7 @@ case "$(uname -m)" in
 esac
 mkdir -p "$BUILD_OUTPUT"
 cd "$REPOSITORY_ROOT"
-for command_name in simfleet fanoutbench zeroprobe velaserve-gate oracle-replay schema-check; do
+for command_name in simfleet fanoutbench zeroprobe velaserve-gate oracle-replay schema-check condition-controller epp-normalize source-pressure-compile; do
   env \
     CGO_ENABLED=0 \
     GOOS=linux \
@@ -64,15 +64,7 @@ for command_name in simfleet fanoutbench zeroprobe velaserve-gate oracle-replay 
     GOMODCACHE="${REPOSITORY_ROOT}/.cache/go-mod" \
     go build -trimpath -ldflags="-s -w" -o "${BUILD_OUTPUT}/${command_name}" "./cmd/${command_name}"
 done
-env \
-  CGO_ENABLED=0 \
-  GOOS=linux \
-  GOARCH="$target_arch" \
-  GOCACHE="${REPOSITORY_ROOT}/.cache/upstream-go-build" \
-  GOMODCACHE="${REPOSITORY_ROOT}/.cache/upstream-go-mod" \
-  go -C "${REPOSITORY_ROOT}/.tools/upstream/llm-d-router" build -trimpath -ldflags="-s -w -X github.com/llm-d/llm-d-router/version.CommitSHA=${ROUTER_COMMIT}" \
-    -o "${BUILD_OUTPUT}/epp" \
-    ./cmd/epp
+"${REPOSITORY_ROOT}/hack/build-pinned-epp.sh" "${BUILD_OUTPUT}/epp" linux "$target_arch"
 
 docker build --tag "$VELASERVE_IMAGE" --file "${REPOSITORY_ROOT}/deploy/kind/Dockerfile.velaserve" "$BUILD_OUTPUT"
 docker build --tag "$EPP_IMAGE" --file "${REPOSITORY_ROOT}/deploy/kind/Dockerfile.epp" "$BUILD_OUTPUT"
@@ -105,8 +97,27 @@ readonly ROUTER_CHART="${REPOSITORY_ROOT}/.tools/upstream/llm-d-router/config/ch
 kubectl --context "$CONTEXT" --namespace "$NAMESPACE" rollout status deployment/velaserve-epp --timeout=5m
 kubectl --context "$CONTEXT" apply -f "${REPOSITORY_ROOT}/deploy/gateway/httproute.yaml"
 
+route_ready=0
+for attempt in $(seq 1 60); do
+  route_json="$(kubectl --context "$CONTEXT" --namespace "$NAMESPACE" get httproute velaserve -o json)"
+  if jq -e 'any(.status.parents[]?.conditions[]?; .type == "Accepted" and .status == "True") and any(.status.parents[]?.conditions[]?; .type == "ResolvedRefs" and .status == "True")' <<<"$route_json" >/dev/null; then
+    route_ready=1
+    break
+  fi
+  sleep 2
+done
+[[ "$route_ready" == "1" ]] || { echo "HTTPRoute was not accepted with resolved references" >&2; exit 1; }
+
+gateway_services="$(kubectl --context "$CONTEXT" get services --all-namespaces -l gateway.envoyproxy.io/owning-gateway-name=velaserve-gateway -o json)"
+gateway_service_count="$(jq '.items | length' <<<"$gateway_services")"
+[[ "$gateway_service_count" == "1" ]] || { echo "expected one generated Envoy Gateway service, found $gateway_service_count" >&2; exit 1; }
+gateway_namespace="$(jq -r '.items[0].metadata.namespace' <<<"$gateway_services")"
+gateway_service="$(jq -r '.items[0].metadata.name' <<<"$gateway_services")"
+gateway_port="$(jq -r '.items[0].spec.ports[] | select(.port == 80) | .port' <<<"$gateway_services")"
+[[ "$gateway_port" == "80" ]] || { echo "generated Envoy Gateway service has no HTTP port 80" >&2; exit 1; }
+
 port_forward_log="${REPOSITORY_ROOT}/.tools/kind-port-forward.log"
-nohup kubectl --context "$CONTEXT" --namespace "$NAMESPACE" port-forward service/velaserve-epp 18081:8081 </dev/null >"$port_forward_log" 2>&1 &
+nohup kubectl --context "$CONTEXT" --namespace "$gateway_namespace" port-forward "service/${gateway_service}" 18081:80 </dev/null >"$port_forward_log" 2>&1 &
 port_forward_pid=$!
 echo "$port_forward_pid" >"${REPOSITORY_ROOT}/.tools/kind-port-forward.pid"
 echo "http://127.0.0.1:18081/v1/chat/completions" >"${REPOSITORY_ROOT}/.tools/kind-endpoint"
@@ -120,7 +131,8 @@ for attempt in $(seq 1 30); do
       GOCACHE="${REPOSITORY_ROOT}/.cache/go-build" \
       GOMODCACHE="${REPOSITORY_ROOT}/.cache/go-mod" \
       go test ./tests/integration -run TestKindUpstreamSSE -count=1
-    echo "Kind smoke passed: http://127.0.0.1:18081/v1/chat/completions ($arm)"
+    kubectl --context "$CONTEXT" --namespace "$NAMESPACE" logs deployment/velaserve-epp --all-containers --tail=-1 | grep -Fq 'VELASERVE_EPP_RECORD ' || { echo "pinned EPP observer produced no scheduling record" >&2; exit 1; }
+    echo "Kind smoke passed through Envoy Gateway: http://127.0.0.1:18081/v1/chat/completions ($arm)"
     exit 0
   fi
   sleep 2

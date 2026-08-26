@@ -5,5 +5,8 @@ COPY zeroprobe /app/zeroprobe
 COPY velaserve-gate /app/velaserve-gate
 COPY oracle-replay /app/oracle-replay
 COPY schema-check /app/schema-check
+COPY condition-controller /app/condition-controller
+COPY epp-normalize /app/epp-normalize
+COPY source-pressure-compile /app/source-pressure-compile
 USER 65532:65532
 ENTRYPOINT ["/app/simfleet"]

@@ -14,20 +14,15 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/JDinSeattle/velaserve/internal/evidence"
 	"github.com/JDinSeattle/velaserve/internal/jsonl"
 )
 
-type DecideFileOptions struct {
+type DecisionBindings struct {
 	EvidencePath        string
 	PreregistrationPath string
 	LedgerPath          string
-	OutputPath          string
-	DecisionID          string
-	EvidenceComplete    bool
-	DecidedAt           time.Time
 }
 
 func GenerateKeyFiles(privatePath, publicPath string) error {
@@ -57,43 +52,13 @@ func GenerateKeyFiles(privatePath, publicPath string) error {
 	return nil
 }
 
-func DecideFile(options DecideFileOptions) error {
-	cells, err := jsonl.Read[evidence.GateEvidenceCell](options.EvidencePath)
-	if err != nil {
-		return fmt.Errorf("read gate evidence: %w", err)
-	}
-	preregistrationHash, err := hashPath(options.PreregistrationPath)
-	if err != nil {
-		return fmt.Errorf("hash preregistration: %w", err)
-	}
-	ledgerHash, err := hashPath(options.LedgerPath)
-	if err != nil {
-		return fmt.Errorf("hash artifact ledger: %w", err)
-	}
-	decision, err := Decide(DecisionInput{
-		DecisionID:            options.DecisionID,
-		PreregistrationSHA256: preregistrationHash,
-		ArtifactLedgerSHA256:  ledgerHash,
-		Threshold:             0.10,
-		Confidence:            0.95,
-		EvidenceComplete:      options.EvidenceComplete,
-		Evidence:              cells,
-		DecidedAt:             options.DecidedAt,
-	})
-	if err != nil {
-		return err
-	}
-	encoded, err := json.MarshalIndent(decision, "", "  ")
-	if err != nil {
-		return fmt.Errorf("encode gate decision: %w", err)
-	}
-	return writeExclusive(options.OutputPath, append(encoded, '\n'), 0o644)
-}
-
-func SignDecisionFile(decisionPath, privatePath, outputPath string) error {
+func SignDecisionFile(decisionPath, privatePath, outputPath string, bindings DecisionBindings) error {
 	decision, err := decodeJSONFile[evidence.GateDecision](decisionPath)
 	if err != nil {
 		return fmt.Errorf("read gate decision: %w", err)
+	}
+	if err := verifyBindings(decision, bindings); err != nil {
+		return err
 	}
 	privateBytes, err := readBase64Key(privatePath, ed25519.PrivateKeySize)
 	if err != nil {
@@ -110,16 +75,68 @@ func SignDecisionFile(decisionPath, privatePath, outputPath string) error {
 	return writeExclusive(outputPath, append(encoded, '\n'), 0o644)
 }
 
-func VerifyDecisionFile(signedPath, publicPath string) error {
+func VerifyDecisionFile(signedPath, publicPath string, bindings DecisionBindings) error {
 	signed, err := decodeJSONFile[SignedDecision](signedPath)
 	if err != nil {
 		return fmt.Errorf("read signed gate decision: %w", err)
+	}
+	if err := verifyBindings(signed.Decision, bindings); err != nil {
+		return err
 	}
 	publicBytes, err := readBase64Key(publicPath, ed25519.PublicKeySize)
 	if err != nil {
 		return fmt.Errorf("read public key: %w", err)
 	}
 	return Verify(signed, ed25519.PublicKey(publicBytes))
+}
+
+func verifyBindings(decision evidence.GateDecision, bindings DecisionBindings) error {
+	want := []struct {
+		name string
+		path string
+		hash string
+	}{
+		{"preregistration", bindings.PreregistrationPath, decision.PreregistrationSHA256},
+		{"artifact ledger", bindings.LedgerPath, decision.ArtifactLedgerSHA256},
+		{"gate evidence", bindings.EvidencePath, decision.EvidenceSHA256},
+	}
+	for _, binding := range want {
+		got, err := hashPath(binding.path)
+		if err != nil {
+			return fmt.Errorf("hash bound %s: %w", binding.name, err)
+		}
+		if got != binding.hash {
+			return fmt.Errorf("bound %s SHA-256 does not match decision", binding.name)
+		}
+	}
+	cells, err := jsonl.Read[evidence.GateEvidenceCell](bindings.EvidencePath)
+	if err != nil {
+		return fmt.Errorf("read bound gate evidence: %w", err)
+	}
+	recomputed, err := Decide(DecisionInput{
+		DecisionID:            decision.DecisionID,
+		PreregistrationSHA256: decision.PreregistrationSHA256,
+		ArtifactLedgerSHA256:  decision.ArtifactLedgerSHA256,
+		EvidenceSHA256:        decision.EvidenceSHA256,
+		Threshold:             decision.Threshold,
+		Confidence:            decision.Confidence,
+		EvidenceComplete:      decision.Branch != evidence.BranchInsufficientEvidence,
+		Evidence:              cells,
+		DecidedAt:             decision.DecidedAt,
+	})
+	if err != nil {
+		return fmt.Errorf("recompute bound decision: %w", err)
+	}
+	if !decisionsEqual(decision, recomputed) {
+		return fmt.Errorf("decision does not match bound gate evidence")
+	}
+	return nil
+}
+
+func decisionsEqual(left, right evidence.GateDecision) bool {
+	leftJSON, leftErr := json.Marshal(left)
+	rightJSON, rightErr := json.Marshal(right)
+	return leftErr == nil && rightErr == nil && bytes.Equal(leftJSON, rightJSON)
 }
 
 func writeExclusive(path string, content []byte, mode os.FileMode) error {

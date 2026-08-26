@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/JDinSeattle/velaserve/internal/bench"
+	"github.com/JDinSeattle/velaserve/internal/fanout/protocol"
 )
 
 func TestKindUpstreamSSE(t *testing.T) {
@@ -36,6 +37,19 @@ func TestKindUpstreamSSE(t *testing.T) {
 		t.Fatal(err)
 	}
 	request.Header.Set("Content-Type", "application/json")
+	group, err := protocol.NewGroup(2, 16)
+	if err != nil {
+		t.Fatal(err)
+	}
+	headers, err := group.Headers(0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, values := range headers {
+		for _, value := range values {
+			request.Header.Add(name, value)
+		}
+	}
 	response, err := http.DefaultClient.Do(request)
 	if err != nil {
 		t.Fatal(err)

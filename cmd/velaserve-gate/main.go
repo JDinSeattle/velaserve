@@ -4,8 +4,10 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
+	gatecompiler "github.com/JDinSeattle/velaserve/research/gate-compiler"
 	gate "github.com/JDinSeattle/velaserve/research/gate-decision"
 )
 
@@ -17,8 +19,8 @@ func main() {
 	switch os.Args[1] {
 	case "keygen":
 		err = keygen(os.Args[2:])
-	case "decide":
-		err = decide(os.Args[2:])
+	case "compile":
+		err = compile(os.Args[2:])
 	case "sign":
 		err = sign(os.Args[2:])
 	case "verify":
@@ -42,14 +44,12 @@ func keygen(args []string) error {
 	return gate.GenerateKeyFiles(*privatePath, *publicPath)
 }
 
-func decide(args []string) error {
-	flags := flag.NewFlagSet("decide", flag.ContinueOnError)
-	evidencePath := flags.String("evidence", "", "gate evidence JSONL")
+func compile(args []string) error {
+	flags := flag.NewFlagSet("compile", flag.ContinueOnError)
+	bundlePaths := flags.String("bundles", "", "comma-separated verified Z0-B/Z0-C bundle directories")
 	preregistrationPath := flags.String("preregistration", "", "frozen preregistration file")
-	ledgerPath := flags.String("ledger", "", "artifact ledger JSONL")
-	outputPath := flags.String("output", "", "decision JSON output")
+	outputDirectory := flags.String("output-dir", "", "new compiled gate directory")
 	decisionID := flags.String("id", "", "opaque decision ID")
-	complete := flags.Bool("complete", false, "assert that every preregistered evidence cell is present")
 	decidedAtText := flags.String("decided-at", "", "RFC3339 decision timestamp; defaults to current UTC time")
 	if err := flags.Parse(args); err != nil {
 		return err
@@ -62,15 +62,20 @@ func decide(args []string) error {
 		}
 		decidedAt = parsed
 	}
-	return gate.DecideFile(gate.DecideFileOptions{
-		EvidencePath:        *evidencePath,
+	var bundles []string
+	for _, path := range strings.Split(*bundlePaths, ",") {
+		if trimmed := strings.TrimSpace(path); trimmed != "" {
+			bundles = append(bundles, trimmed)
+		}
+	}
+	_, err := gatecompiler.Compile(gatecompiler.Options{
+		BundleRoots:         bundles,
 		PreregistrationPath: *preregistrationPath,
-		LedgerPath:          *ledgerPath,
-		OutputPath:          *outputPath,
+		OutputDirectory:     *outputDirectory,
 		DecisionID:          *decisionID,
-		EvidenceComplete:    *complete,
 		DecidedAt:           decidedAt,
 	})
+	return err
 }
 
 func sign(args []string) error {
@@ -78,23 +83,29 @@ func sign(args []string) error {
 	decisionPath := flags.String("decision", "", "unsigned decision JSON")
 	privatePath := flags.String("private", "", "Ed25519 private key")
 	outputPath := flags.String("output", "", "signed decision JSON output")
+	evidencePath := flags.String("evidence", "", "bound gate evidence JSONL")
+	preregistrationPath := flags.String("preregistration", "", "bound frozen preregistration")
+	ledgerPath := flags.String("ledger", "", "bound aggregate artifact ledger")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
-	return gate.SignDecisionFile(*decisionPath, *privatePath, *outputPath)
+	return gate.SignDecisionFile(*decisionPath, *privatePath, *outputPath, gate.DecisionBindings{EvidencePath: *evidencePath, PreregistrationPath: *preregistrationPath, LedgerPath: *ledgerPath})
 }
 
 func verify(args []string) error {
 	flags := flag.NewFlagSet("verify", flag.ContinueOnError)
 	signedPath := flags.String("signed", "", "signed decision JSON")
 	publicPath := flags.String("public", "", "Ed25519 public key")
+	evidencePath := flags.String("evidence", "", "bound gate evidence JSONL")
+	preregistrationPath := flags.String("preregistration", "", "bound frozen preregistration")
+	ledgerPath := flags.String("ledger", "", "bound aggregate artifact ledger")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
-	return gate.VerifyDecisionFile(*signedPath, *publicPath)
+	return gate.VerifyDecisionFile(*signedPath, *publicPath, gate.DecisionBindings{EvidencePath: *evidencePath, PreregistrationPath: *preregistrationPath, LedgerPath: *ledgerPath})
 }
 
 func usage() {
-	fmt.Fprintln(os.Stderr, "usage: velaserve-gate <keygen|decide|sign|verify> [flags]")
+	fmt.Fprintln(os.Stderr, "usage: velaserve-gate <keygen|compile|sign|verify> [flags]")
 	os.Exit(2)
 }

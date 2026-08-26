@@ -52,6 +52,10 @@ func run(ctx context.Context, args []string) (any, error) {
 	limit := flags.Uint64("limit", 0, "partial smoke limit; zero runs the complete matrix")
 	maxEventBytes := flags.Int("max-event-bytes", 8<<20, "maximum bytes in one SSE event")
 	simulator := flags.Bool("simulator", false, "enable X-Sim metadata and target correlation; never use for cloud runs")
+	prefixSourceCount := flags.Uint("prefix-source-count", 0, "Z0-C condition: exact shared-prefix source count, one of 1, 2, or 4")
+	conditionController := flags.String("condition-controller", "", "HTTP endpoint that applies and attests every real workload condition")
+	requireCondition := flags.Bool("require-condition-attestation", false, "fail before inference unless every workload condition is attested")
+	preflightBinding := flags.String("preflight-binding", "", "immutable deployment binding emitted by cloud-preflight")
 	if err := flags.Parse(args); err != nil {
 		return nil, err
 	}
@@ -61,11 +65,15 @@ func run(ctx context.Context, args []string) (any, error) {
 			PreregistrationPath: *profile,
 			ArtifactRoot:        *artifactRoot,
 		},
-		BenchmarkProfilePath: *benchmarkProfile,
-		Endpoint:             *endpoint,
-		Limit:                *limit,
-		MaxEventBytes:        *maxEventBytes,
-		SimulatorMode:        *simulator,
+		BenchmarkProfilePath:        *benchmarkProfile,
+		Endpoint:                    *endpoint,
+		Limit:                       *limit,
+		MaxEventBytes:               *maxEventBytes,
+		SimulatorMode:               *simulator,
+		PrefixSourceCount:           uint32(*prefixSourceCount),
+		ConditionControllerEndpoint: *conditionController,
+		RequireConditionAttestation: *requireCondition,
+		PreflightBindingPath:        *preflightBinding,
 	})
 }
 

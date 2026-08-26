@@ -35,13 +35,18 @@ for path in \
   docs/cloud-handoff.md \
   docs/upstream-version-matrix.md \
   docs/gate-status.md \
+  deploy/upstream-patches/llm-d-router-stage1-observer.patch \
+  hack/build-pinned-epp.sh \
   scripts/security-audit.sh \
   .github/workflows/ci.yml; do
   require_file "$path"
 done
 contains_fixed README.md "gate status: NOT RUN ON REAL GPU"
+contains_fixed README.md "paired-p95 bootstrap"
 contains_fixed docs/gate-status.md "No production placement or source-pressure coordination code exists"
 contains_fixed docs/performance-report.md "awaiting real-GPU Z0"
+contains_fixed docs/cloud-handoff.md "cloud-preflight-binding.json"
+contains_fixed docs/cloud-handoff.md "velaserve-gate compile"
 for job in go-test race-and-property schemas-and-local-zeroing render-manifests terraform-validate security stage1-audit; do
   grep -Eq "^  ${job}:$" "${REPOSITORY_ROOT}/.github/workflows/ci.yml" || fail "CI job is missing: $job"
 done

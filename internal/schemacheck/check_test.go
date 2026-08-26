@@ -19,7 +19,7 @@ func TestValidateDirectoriesAcceptsValidAndRejectsInvalidFixtures(t *testing.T) 
 	if err != nil {
 		t.Fatalf("ValidateDirectories() error = %v", err)
 	}
-	if report.ValidAccepted != 3 || report.InvalidRejected != 1 {
-		t.Fatalf("ValidateDirectories() report = %#v, want 3 valid and 1 invalid", report)
+	if report.ValidAccepted != 4 || report.InvalidRejected != 2 {
+		t.Fatalf("ValidateDirectories() report = %#v, want 4 valid and 2 invalid", report)
 	}
 }

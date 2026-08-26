@@ -8,7 +8,7 @@ readonly KIND="${REPOSITORY_ROOT}/.tools/bin/kind"
 
 if [[ -f "$PID_FILE" ]]; then
   port_forward_pid="$(tr -d '[:space:]' <"$PID_FILE")"
-  if [[ "$port_forward_pid" =~ ^[0-9]+$ ]] && ps -p "$port_forward_pid" -o command= 2>/dev/null | grep -q 'kubectl.*port-forward.*velaserve-epp'; then
+  if [[ "$port_forward_pid" =~ ^[0-9]+$ ]] && ps -p "$port_forward_pid" -o command= 2>/dev/null | grep -q 'kubectl.*port-forward.*service/'; then
     kill "$port_forward_pid"
   fi
 fi

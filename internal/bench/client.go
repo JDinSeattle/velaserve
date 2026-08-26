@@ -31,11 +31,14 @@ const (
 )
 
 type Client struct {
-	Endpoint      string
-	HTTPClient    *http.Client
-	MaxEventBytes int
-	Now           func() time.Time
-	SimulatorMode bool
+	Endpoint                    string
+	HTTPClient                  *http.Client
+	MaxEventBytes               int
+	Now                         func() time.Time
+	SimulatorMode               bool
+	ConditionControllerEndpoint string
+	RequireConditionAttestation bool
+	PrefixSourceCount           uint32
 }
 
 type GroupRequest struct {
@@ -66,6 +69,14 @@ func (client Client) RunGroup(ctx context.Context, request GroupRequest) (eviden
 	if err != nil {
 		return evidence.GroupResult{}, fmt.Errorf("create fan-out group: %w", err)
 	}
+	var condition *evidence.ConditionAttestation
+	if client.RequireConditionAttestation {
+		applied, err := client.applyCondition(ctx, group.GroupID, request)
+		if err != nil {
+			return evidence.GroupResult{}, fmt.Errorf("apply workload condition: %w", err)
+		}
+		condition = &applied
+	}
 	children := make([]evidence.ChildResult, len(request.Suffixes))
 
 	var waitGroup sync.WaitGroup
@@ -93,6 +104,7 @@ func (client Client) RunGroup(ctx context.Context, request GroupRequest) (eviden
 	waitGroup.Wait()
 
 	result := summarizeGroup(request, group.GroupID, children)
+	result.Condition = condition
 	if err := evidence.ValidateGroupResult(result); err != nil {
 		return evidence.GroupResult{}, fmt.Errorf("internal group evidence is invalid: %w", err)
 	}

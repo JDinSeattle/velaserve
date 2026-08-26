@@ -22,7 +22,7 @@
 | Terraform EKS module | `21.24.2` | EKS and managed CPU node group |
 | Terraform VPC module | `6.6.1` | Dedicated experiment network |
 
-`hack/fetch-upstream.sh` clones each Git repository, checks out the exact commit, verifies `HEAD`, and refuses a dirty checkout. `hack/bootstrap-tools.sh` downloads platform archives and verifies publisher checksums before installation. Terraform's dependency lock file records provider hashes across supported platforms.
+`hack/fetch-upstream.sh` clones each Git repository, checks out the exact commit, verifies `HEAD`, and refuses a dirty checkout. `hack/build-pinned-epp.sh` exports that exact tree into a temporary directory, checks and applies `deploy/upstream-patches/llm-d-router-stage1-observer.patch`, and builds an EPP whose only VelaServe behavior is emitting request-scoped scheduling evidence when valid Vela fan-out headers are present. The patch does not change candidates, scores, selection, headers, or routing. `hack/bootstrap-tools.sh` downloads platform archives and verifies publisher checksums before installation. Terraform's dependency lock file records provider hashes across supported platforms.
 
 Image tags in the local harness are paired with locally built exact source. A real-GPU run must additionally use ECR `@sha256:` references and record them in preflight/artifacts. The model revision must be a 40-to-64-character immutable content identifier, not a branch or friendly tag.
 

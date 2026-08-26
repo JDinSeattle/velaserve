@@ -12,13 +12,13 @@ pinned upstream llm-d EPP (Arm A or Arm B)
   v
 homogeneous model endpoints (local simfleet or operator-deployed vLLM)
 
-groups.jsonl + normalized Envoy/EPP JSONL
+condition-attested groups.jsonl + Envoy JSONL + pinned-observer EPP log
   v
-placement-recorder -> placements.jsonl + unmatched.jsonl
+EPP normalizer + placement-recorder -> placements.jsonl + unmatched.jsonl
   v
 offline replay (observed Arm B and N-aware oracle)
   v
-paired statistics -> unsigned decision -> Ed25519-signed gate artifact
+raw-bundle gate compiler -> hash-bound decision -> Ed25519-signed gate artifact
 ```
 
 The online request path contains only upstream routing. The N-aware planner is offline research code: it cannot select a live endpoint, create distributed state, or alter an inference request. That separation is the central Stage-1 safety boundary.
@@ -28,11 +28,13 @@ The online request path contains only upstream routing. The N-aware planner is o
 | Component | Role | Evidence boundary |
 |---|---|---|
 | `fanoutbench` | Sends N sibling streams with deterministic IDs/skew and waits for all terminal outcomes | Records child TTFT, latency, completion, usage, and group makespan |
+| condition controller | Calls an operator-supplied workload-state driver before each real group | Records the observed-state payload plus revision/SHA-bound load, cache, and source-count receipt |
 | `simfleet` | Models eight deterministic endpoints and emits normalized routing records | Always labeled `simulation_only`; not a performance proxy |
-| llm-d EPP | Runs frozen precise-affinity + P2P or load-aware + P2P profiles | Built from the exact commit in `versions.lock.yaml` |
+| llm-d EPP | Runs frozen precise-affinity + P2P or load-aware + P2P profiles | Exact commit plus a reviewable observational-only patch that emits candidate snapshots and targets |
 | `placement-recorder` | Joins request/group IDs across result, Envoy, and EPP records | Preserves unmatched inputs instead of inventing a target |
+| source-pressure compiler | Joins one raw model-runtime acquisition event to every condition-attested Z0-C child | Derives source count and last-sibling TTFT from the group rather than trusting the adapter |
 | N-aware oracle | Evaluates feasible endpoint allocation from the observed snapshot | Prediction depends on a hashed, operator-supplied calibration |
-| gate analyzer | Applies fixed pairing, confidence, threshold, and adjacency rules | Incomplete evidence can only produce `insufficient-evidence` |
+| gate compiler | Re-verifies ledgers, invariant deployment bindings, raw-to-derived equality, matrix completeness, sequential Z0-B/Z0-C eligibility, confidence, threshold, and adjacency | Only compiler output can enter the signing command |
 | artifact ledger | Records a canonical relative path, byte count, SHA-256, and timestamp | Duplicate paths, traversal, symlinks, and later mutation fail verification |
 
 ## Routing arms
@@ -46,7 +48,7 @@ The chart permits only the two Stage-1 upstream routing profiles. A second EPP r
 
 ## Local topology
 
-`hack/kind-up.sh` creates the exact `velaserve-z0` Kind cluster, builds the pinned EPP from source, installs pinned Envoy Gateway and Gateway API Inference Extension manifests, deploys eight simulator pods, and verifies a full SSE response through the EPP service. Scratch images contain only statically linked binaries. The local chart runs non-root, drops capabilities, disables service-account token mounting, and uses a read-only root filesystem.
+`hack/kind-up.sh` creates the exact `velaserve-z0` Kind cluster, applies the checked-in observer patch to the pinned EPP source in a temporary build tree, installs pinned Envoy Gateway and Gateway API Inference Extension manifests, deploys eight simulator pods, waits for HTTPRoute `Accepted` and `ResolvedRefs`, and verifies a fan-out SSE response through the generated Envoy Gateway service plus an observer record. Scratch images contain only statically linked binaries. The local chart runs non-root, drops capabilities, disables service-account token mounting, and uses a read-only root filesystem.
 
 ## AWS handoff topology
 

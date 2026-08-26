@@ -18,7 +18,8 @@
     "cell": {"$ref": "#/$defs/benchmarkCell"},
     "outcome": {"enum": ["success", "failure", "cancelled"]},
     "failure": {"type": "string", "minLength": 1},
-    "children": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/child"}}
+    "children": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/child"}},
+    "condition": {"$ref": "#/$defs/condition"}
   },
   "$defs": {
     "benchmarkCell": {
@@ -43,6 +44,36 @@
       "additionalProperties": false,
       "required": ["id", "model"],
       "properties": {"id": {"type": "string", "minLength": 1}, "model": {"type": "string", "minLength": 1}, "zone": {"type": "string"}}
+    },
+    "condition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "run_id", "group_id", "load_regime", "cache_state", "controller_revision", "state_sha256", "observed_state", "applied_at"],
+      "properties": {
+        "schema_version": {"const": "velaserve.condition-attestation/v1"},
+        "run_id": {"type": "string", "minLength": 1},
+        "group_id": {"type": "string", "minLength": 1},
+        "load_regime": {"enum": ["idle", "moderate", "near-saturation"]},
+        "cache_state": {"enum": ["warm-owner", "distributed-warm", "cold"]},
+        "prefix_source_count": {"enum": [1, 2, 4]},
+        "controller_revision": {"type": "string", "minLength": 1},
+        "state_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "observed_state": {"$ref": "#/$defs/conditionObservedState"},
+        "applied_at": {"type": "string", "format": "date-time"}
+      }
+    },
+    "conditionObservedState": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["offered_load_qps", "achieved_load_qps", "saturation_qps", "cached_endpoint_ids", "measurement_source"],
+      "properties": {
+        "offered_load_qps": {"type": "number", "minimum": 0},
+        "achieved_load_qps": {"type": "number", "minimum": 0},
+        "saturation_qps": {"type": "number", "exclusiveMinimum": 0},
+        "cached_endpoint_ids": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+        "prefix_source_endpoint_ids": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+        "measurement_source": {"type": "string", "minLength": 1}
+      }
     },
     "child": {
       "type": "object",

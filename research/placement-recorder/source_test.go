@@ -42,13 +42,14 @@ func TestSourcePressureOmitsUnavailableHardwareCounters(t *testing.T) {
 
 func TestSourcePressureRequiresP2PTransferEvidence(t *testing.T) {
 	record := SourcePressureObservation{
-		SchemaVersion: SourcePressureSchemaVersion,
-		RunID:         "run-source-1",
-		GroupID:       "group-source-1",
-		RequestID:     "request-01",
-		FanoutWidth:   8,
-		Acquisition:   AcquisitionP2P,
-		ObservedAt:    time.Now(),
+		SchemaVersion:        SourcePressureSchemaVersion,
+		RunID:                "run-source-1",
+		GroupID:              "group-source-1",
+		RequestID:            "request-01",
+		FanoutWidth:          8,
+		Acquisition:          AcquisitionP2P,
+		CandidateSourceCount: 1,
+		ObservedAt:           time.Now(),
 	}
 	if err := ValidateSourcePressure(record); err == nil || !strings.Contains(err.Error(), "chosen_source") {
 		t.Fatalf("ValidateSourcePressure() error = %v", err)

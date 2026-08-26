@@ -1,6 +1,9 @@
 package evidence
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"math"
 	"strings"
@@ -83,6 +86,27 @@ func ValidateGroupResult(result GroupResult) error {
 	if err := validateBenchmarkCell(result.Cell); err != nil {
 		return fmt.Errorf("cell: %w", err)
 	}
+	if result.Condition != nil {
+		condition := result.Condition
+		if condition.SchemaVersion != ConditionAttestationSchemaVersion || condition.RunID != result.RunID || condition.GroupID != result.GroupID {
+			return fmt.Errorf("condition: schema or group identity mismatch")
+		}
+		if condition.LoadRegime != result.Cell.LoadRegime || condition.CacheState != result.Cell.CacheState {
+			return fmt.Errorf("condition: applied load/cache state does not match benchmark cell")
+		}
+		if strings.TrimSpace(condition.ControllerRevision) == "" || !isLowerHexSHA256(condition.StateSHA256) || condition.AppliedAt.IsZero() {
+			return fmt.Errorf("condition: controller revision, state SHA-256, and applied time are required")
+		}
+		if err := ValidateConditionObservedState(condition.ObservedState, condition.LoadRegime, condition.CacheState, condition.PrefixSourceCount); err != nil {
+			return fmt.Errorf("condition: %w", err)
+		}
+		if conditionStateSHA256(*condition) != condition.StateSHA256 {
+			return fmt.Errorf("condition: observed state SHA-256 does not match its applied condition")
+		}
+		if condition.PrefixSourceCount != 0 && condition.PrefixSourceCount != 1 && condition.PrefixSourceCount != 2 && condition.PrefixSourceCount != 4 {
+			return fmt.Errorf("condition: prefix source count is not registered")
+		}
+	}
 	if err := validateOutcome("outcome", result.Outcome, result.Failure); err != nil {
 		return err
 	}
@@ -117,6 +141,121 @@ func ValidateGroupResult(result GroupResult) error {
 		}
 	}
 	return nil
+}
+
+func ValidateConditionObservedState(state ConditionObservedState, load LoadRegime, cacheState string, prefixSourceCount uint32) error {
+	if !finiteNonNegativeValue(state.OfferedLoadQPS) || !finiteNonNegativeValue(state.AchievedLoadQPS) || !finiteNonNegativeValue(state.SaturationQPS) || state.SaturationQPS == 0 || strings.TrimSpace(state.MeasurementSource) == "" {
+		return fmt.Errorf("observed load rates and measurement source are invalid")
+	}
+	offeredFraction := state.OfferedLoadQPS / state.SaturationQPS
+	achievedFraction := state.AchievedLoadQPS / state.SaturationQPS
+	switch load {
+	case LoadIdle:
+		if offeredFraction > 0.05 || achievedFraction > 0.05 {
+			return fmt.Errorf("idle offered or achieved load exceeds 5 percent of saturation")
+		}
+	case LoadModerate:
+		if offeredFraction < 0.40 || offeredFraction > 0.60 || achievedFraction < 0.40 || achievedFraction > 0.60 {
+			return fmt.Errorf("moderate offered or achieved load is outside 40 to 60 percent of saturation")
+		}
+	case LoadNearSaturation:
+		if offeredFraction < 0.85 || offeredFraction > 0.95 || achievedFraction < 0.85 || achievedFraction > 0.95 {
+			return fmt.Errorf("near-saturation offered or achieved load is outside 85 to 95 percent of saturation")
+		}
+	default:
+		return fmt.Errorf("observed load regime is unsupported")
+	}
+	cached, err := uniqueConditionIDs(state.CachedEndpointIDs)
+	if err != nil {
+		return fmt.Errorf("cached endpoint IDs: %w", err)
+	}
+	sources, err := uniqueConditionIDs(state.PrefixSourceEndpointIDs)
+	if err != nil {
+		return fmt.Errorf("prefix-source endpoint IDs: %w", err)
+	}
+	if prefixSourceCount != 0 {
+		if prefixSourceCount != 1 && prefixSourceCount != 2 && prefixSourceCount != 4 {
+			return fmt.Errorf("prefix source count is not registered")
+		}
+		if cacheState != "distributed-warm" || len(sources) != int(prefixSourceCount) || len(cached) != len(sources) {
+			return fmt.Errorf("Z0-C requires an exact distributed-warm source set")
+		}
+		for id := range sources {
+			if _, exists := cached[id]; !exists {
+				return fmt.Errorf("Z0-C cached and prefix-source endpoint sets differ")
+			}
+		}
+		return nil
+	}
+	if len(sources) != 0 {
+		return fmt.Errorf("non-Z0-C state cannot include prefix-source endpoints")
+	}
+	switch cacheState {
+	case "cold":
+		if len(cached) != 0 {
+			return fmt.Errorf("cold cache state contains cached endpoints")
+		}
+	case "warm-owner":
+		if len(cached) != 1 {
+			return fmt.Errorf("warm-owner cache state requires exactly one cached endpoint")
+		}
+	case "distributed-warm":
+		if len(cached) < 2 {
+			return fmt.Errorf("distributed-warm cache state requires at least two cached endpoints")
+		}
+	default:
+		return fmt.Errorf("observed cache state is unsupported")
+	}
+	return nil
+}
+
+func conditionStateSHA256(condition ConditionAttestation) string {
+	state := struct {
+		SchemaVersion     string                 `json:"schema_version"`
+		LoadRegime        LoadRegime             `json:"load_regime"`
+		CacheState        string                 `json:"cache_state"`
+		PrefixSourceCount uint32                 `json:"prefix_source_count,omitempty"`
+		ObservedState     ConditionObservedState `json:"observed_state"`
+	}{
+		SchemaVersion: "velaserve.applied-condition/v1", LoadRegime: condition.LoadRegime,
+		CacheState: condition.CacheState, PrefixSourceCount: condition.PrefixSourceCount, ObservedState: condition.ObservedState,
+	}
+	encoded, err := json.Marshal(state)
+	if err != nil {
+		return ""
+	}
+	digest := sha256.Sum256(encoded)
+	return hex.EncodeToString(digest[:])
+}
+
+func uniqueConditionIDs(values []string) (map[string]struct{}, error) {
+	result := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		if strings.TrimSpace(value) == "" {
+			return nil, fmt.Errorf("contains an empty identity")
+		}
+		if _, exists := result[value]; exists {
+			return nil, fmt.Errorf("contains duplicate identity %q", value)
+		}
+		result[value] = struct{}{}
+	}
+	return result, nil
+}
+
+func finiteNonNegativeValue(value float64) bool {
+	return !math.IsNaN(value) && !math.IsInf(value, 0) && value >= 0
+}
+
+func isLowerHexSHA256(value string) bool {
+	if len(value) != 64 {
+		return false
+	}
+	for _, char := range value {
+		if (char < '0' || char > '9') && (char < 'a' || char > 'f') {
+			return false
+		}
+	}
+	return true
 }
 
 func validateBenchmarkCell(cell BenchmarkCell) error {

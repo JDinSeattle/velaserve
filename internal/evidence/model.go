@@ -114,20 +114,45 @@ type BenchmarkCell struct {
 	EPPReplicas   uint32     `json:"epp_replicas"`
 }
 
+const ConditionAttestationSchemaVersion = "velaserve.condition-attestation/v1"
+
+type ConditionAttestation struct {
+	SchemaVersion      string                 `json:"schema_version"`
+	RunID              string                 `json:"run_id"`
+	GroupID            string                 `json:"group_id"`
+	LoadRegime         LoadRegime             `json:"load_regime"`
+	CacheState         string                 `json:"cache_state"`
+	PrefixSourceCount  uint32                 `json:"prefix_source_count,omitempty"`
+	ControllerRevision string                 `json:"controller_revision"`
+	StateSHA256        string                 `json:"state_sha256"`
+	ObservedState      ConditionObservedState `json:"observed_state"`
+	AppliedAt          time.Time              `json:"applied_at"`
+}
+
+type ConditionObservedState struct {
+	OfferedLoadQPS          float64  `json:"offered_load_qps"`
+	AchievedLoadQPS         float64  `json:"achieved_load_qps"`
+	SaturationQPS           float64  `json:"saturation_qps"`
+	CachedEndpointIDs       []string `json:"cached_endpoint_ids"`
+	PrefixSourceEndpointIDs []string `json:"prefix_source_endpoint_ids,omitempty"`
+	MeasurementSource       string   `json:"measurement_source"`
+}
+
 type GroupResult struct {
-	SchemaVersion           string        `json:"schema_version"`
-	RunID                   string        `json:"run_id"`
-	Arm                     Arm           `json:"arm"`
-	GroupID                 string        `json:"group_id"`
-	FanoutWidth             uint32        `json:"fanout_width"`
-	MakespanSeconds         float64       `json:"makespan_seconds"`
-	SlowestChildTTFTSeconds float64       `json:"slowest_child_ttft_seconds"`
-	RecomputedPrefixTokens  *uint64       `json:"recomputed_prefix_tokens,omitempty"`
-	EstimatedPrefillSeconds *float64      `json:"estimated_prefill_gpu_seconds,omitempty"`
-	Cell                    BenchmarkCell `json:"cell"`
-	Outcome                 Outcome       `json:"outcome"`
-	Failure                 string        `json:"failure,omitempty"`
-	Children                []ChildResult `json:"children"`
+	SchemaVersion           string                `json:"schema_version"`
+	RunID                   string                `json:"run_id"`
+	Arm                     Arm                   `json:"arm"`
+	GroupID                 string                `json:"group_id"`
+	FanoutWidth             uint32                `json:"fanout_width"`
+	MakespanSeconds         float64               `json:"makespan_seconds"`
+	SlowestChildTTFTSeconds float64               `json:"slowest_child_ttft_seconds"`
+	RecomputedPrefixTokens  *uint64               `json:"recomputed_prefix_tokens,omitempty"`
+	EstimatedPrefillSeconds *float64              `json:"estimated_prefill_gpu_seconds,omitempty"`
+	Cell                    BenchmarkCell         `json:"cell"`
+	Outcome                 Outcome               `json:"outcome"`
+	Failure                 string                `json:"failure,omitempty"`
+	Children                []ChildResult         `json:"children"`
+	Condition               *ConditionAttestation `json:"condition,omitempty"`
 }
 
 type ConfidenceInterval struct {
@@ -137,13 +162,15 @@ type ConfidenceInterval struct {
 }
 
 type GateEvidenceCell struct {
-	FanoutWidth  uint32             `json:"fanout_width"`
-	LoadRegime   LoadRegime         `json:"load_regime"`
-	PrefixRegime string             `json:"prefix_regime"`
-	Transport    string             `json:"transport"`
-	Metric       string             `json:"metric"`
-	Pairs        uint32             `json:"pairs"`
-	Improvement  ConfidenceInterval `json:"improvement"`
+	FanoutWidth          uint32             `json:"fanout_width"`
+	LoadRegime           LoadRegime         `json:"load_regime"`
+	PrefixRegime         string             `json:"prefix_regime"`
+	Transport            string             `json:"transport"`
+	Metric               string             `json:"metric"`
+	BaselineSourceCount  uint32             `json:"baseline_source_count,omitempty"`
+	CandidateSourceCount uint32             `json:"candidate_source_count,omitempty"`
+	Pairs                uint32             `json:"pairs"`
+	Improvement          ConfidenceInterval `json:"improvement"`
 }
 
 type GateDecision struct {
@@ -151,6 +178,7 @@ type GateDecision struct {
 	DecisionID            string             `json:"decision_id"`
 	PreregistrationSHA256 string             `json:"preregistration_sha256"`
 	ArtifactLedgerSHA256  string             `json:"artifact_ledger_sha256"`
+	EvidenceSHA256        string             `json:"evidence_sha256"`
 	Threshold             float64            `json:"threshold"`
 	Confidence            float64            `json:"confidence"`
 	Branch                GateBranch         `json:"branch"`

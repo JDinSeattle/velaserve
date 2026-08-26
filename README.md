@@ -14,7 +14,7 @@ No production placement or source-pressure mechanism has been implemented. Stage
 - A Go best-of-N streaming client that validates OpenAI-compatible SSE through semantic output and `[DONE]`, and records every child, including failures and cancellations.
 - An eight-endpoint deterministic simulator for pipeline calibration only. Simulator output is always `simulation_only` evidence.
 - A deterministic N-aware offline oracle that evaluates local hit, P2P pull, and recompute cost against the same endpoint snapshots as the upstream arms.
-- Envoy/EPP record correlation, append-only SHA-256 artifact ledgers, paired bootstrap confidence intervals, and a signed-decision command.
+- Envoy/EPP record correlation, condition-attested groups, strict model-runtime P2P transfer joins, append-only SHA-256 artifact ledgers, paired-p95 bootstrap confidence intervals, and a ledger-derived gate compiler.
 - Pinned Helm/Kind manifests that build and exercise the exact llm-d-router commit through Envoy Gateway and Gateway API Inference Extension.
 - Terraform for a dedicated EKS experiment environment, immutable ECR repositories, a versioned encrypted S3 evidence bucket, Karpenter prerequisites, and scale-to-zero GPU capacity. Repository scripts never apply or destroy Terraform.
 
@@ -51,18 +51,18 @@ For only the local upstream routing smoke:
 ./hack/kind-down.sh
 ```
 
-The first command builds the pinned llm-d Router source, creates an exact Kind cluster, installs the pinned Gateway components, deploys eight simulator endpoints, and verifies a complete SSE stream. The second command deletes only the `velaserve-z0` Kind cluster and its generated port-forward state.
+The first command applies the small observational patch to the exact pinned llm-d Router source, creates an exact Kind cluster, installs the pinned Gateway components, deploys eight simulator endpoints, and verifies a complete fan-out SSE stream through the generated Envoy Gateway service plus an emitted EPP scheduling record. The second command deletes only the `velaserve-z0` Kind cluster and its generated port-forward state.
 
 ## Run the real-GPU handoff
 
 The repository performs no AWS mutation on its own. The operator reviews the Terraform plan, applies infrastructure manually, deploys six to eight homogeneous vLLM replicas behind the declared `velaserve-model` service, pushes digest-addressed images, and then runs the guarded sequence:
 
 ```text
-cloud-preflight.sh -> cloud-run-z0.sh -> export normalized EPP/Envoy records
+cloud-preflight.sh -> condition-attested cloud-run-z0.sh -> export raw EPP + Envoy records
                    -> cloud-collect.sh -> cloud-cleanup.sh
 ```
 
-The preflight checks AWS identity, region, exact EKS cluster, GPU quota, homogeneous ready replicas, model revision, image digests, preregistration/calibration hashes, transport, bucket, kubectl context, and endpoint reachability. Collection verifies the artifact ledger before uploading to a unique S3 run prefix. Cleanup requires the remote ledger, a local collection marker, and the exact typed `cluster/run-id` confirmation; it retains all Terraform-managed infrastructure and evidence.
+The preflight checks AWS identity, region, exact EKS cluster, GPU quota, the six-to-eight replica bound, one-GPU requests/limits, restart-free homogeneous model pods, model/controller revisions, exact model/EPP/controller image digests, deployed routing/EPP contracts, absence of model HPA, preregistration/calibration hashes, transport, bucket, kubectl context, and endpoint reachability. Every real group requires a condition-controller receipt that matches its load, cache, and (for Z0-C) source-count state. Collection normalizes only the marker emitted by the pinned EPP observer, verifies the artifact ledger, and uploads to a unique S3 run prefix.
 
 Follow [the cloud handoff runbook](docs/cloud-handoff.md) rather than invoking these scripts from partial configuration.
 
@@ -70,8 +70,8 @@ Follow [the cloud handoff runbook](docs/cloud-handoff.md) rather than invoking t
 
 - Primary placement metric: p95 group makespan.
 - Source-pressure metric: p95 last-sibling TTFT.
-- Pairing key: repetition, width, prefix/output regime, arrival skew, load, cache state, and transport.
-- Inference: 10,000 deterministic paired bootstrap repetitions at 95% confidence.
+- Pairing key: repetition, width, prefix/output regime, arrival skew, load, cache state, transport, and source-count condition when applicable.
+- Inference: 10,000 deterministic paired bootstrap resamples; every resample recomputes both p95 values before calculating relative improvement, with a 95% percentile interval.
 - Placement branch: the lower confidence bound is at least 10% in two adjacent widths under a declared realistic regime.
 - Source-pressure branch: placement fails, while the independent source-pressure threshold passes.
 - Otherwise: publish the negative result and stop coordination work.
@@ -88,6 +88,8 @@ Incomplete groups remain in raw evidence and make the bundle ineligible for a po
 | `research/placement-recorder` | Envoy/EPP correlation into placement evidence |
 | `research/oracle-replay` | Offline N-aware replay against observed snapshots |
 | `research/gate-decision` | Paired analysis and signed decision artifact |
+| `research/gate-compiler` | Re-verifies raw real-GPU bundles and derives the only signable decision |
+| `internal/conditioncontroller` | Fail-closed driver/attestation contract for real workload state |
 | `internal/artifacts` | Append-only artifact hashing and verification |
 | `deploy/` | Helm, Gateway, observability, and Kind assets |
 | `infra/terraform/` | Review-first AWS/EKS experiment infrastructure |

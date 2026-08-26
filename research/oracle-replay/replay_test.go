@@ -225,6 +225,15 @@ func replayTargets(result ReplayResult) []string {
 	return got
 }
 
+func TestMeasuredQueueAndInflightBecomeAvailability(t *testing.T) {
+	now := time.Date(2026, 8, 26, 0, 0, 0, 0, time.UTC)
+	snapshot := evidence.EndpointSnapshot{ObservedAt: now, Endpoints: []evidence.EndpointState{{QueueDepth: 2, RunningRequests: 3, ObservedInflight: 4}}}
+	got := withMeasuredAvailability(snapshot, 0.5)
+	if got.Endpoints[0].AvailableAtSeconds != 3.0 {
+		t.Fatalf("availability = %v, want 3", got.Endpoints[0].AvailableAtSeconds)
+	}
+}
+
 func sameStrings(left, right []string) bool {
 	if len(left) != len(right) {
 		return false

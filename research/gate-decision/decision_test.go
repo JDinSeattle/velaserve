@@ -106,6 +106,7 @@ func completeInput(cells []evidence.GateEvidenceCell) DecisionInput {
 		DecisionID:            "gate-test-1",
 		PreregistrationSHA256: string(bytes.Repeat([]byte{'a'}, 64)),
 		ArtifactLedgerSHA256:  string(bytes.Repeat([]byte{'b'}, 64)),
+		EvidenceSHA256:        string(bytes.Repeat([]byte{'c'}, 64)),
 		Threshold:             0.10,
 		Confidence:            0.95,
 		EvidenceComplete:      true,
@@ -115,7 +116,7 @@ func completeInput(cells []evidence.GateEvidenceCell) DecisionInput {
 }
 
 func cell(width uint32, load evidence.LoadRegime, prefix, transport, metric string, lower float64) evidence.GateEvidenceCell {
-	return evidence.GateEvidenceCell{
+	result := evidence.GateEvidenceCell{
 		FanoutWidth:  width,
 		LoadRegime:   load,
 		PrefixRegime: prefix,
@@ -124,6 +125,11 @@ func cell(width uint32, load evidence.LoadRegime, prefix, transport, metric stri
 		Pairs:        20,
 		Improvement:  evidence.ConfidenceInterval{Estimate: lower + 0.02, Lower: lower, Upper: lower + 0.04},
 	}
+	if metric == SourcePressureMetric {
+		result.BaselineSourceCount = 1
+		result.CandidateSourceCount = 2
+	}
+	return result
 }
 
 func testKey() (ed25519.PrivateKey, ed25519.PublicKey) {

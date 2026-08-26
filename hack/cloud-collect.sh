@@ -14,7 +14,7 @@ for variable_name in \
   VELASERVE_AWS_REGION \
   VELASERVE_CLUSTER_NAME \
   VELASERVE_NAMESPACE \
-  VELASERVE_EPP_RECORDS_PATH \
+  VELASERVE_EPP_LOG_PATH \
   VELASERVE_ENVOY_RECORDS_PATH \
   VELASERVE_ORACLE_CALIBRATION; do
   require_env "$variable_name"
@@ -23,15 +23,29 @@ for command_name in aws kubectl jq go shasum curl find; do
   command -v "$command_name" >/dev/null 2>&1 || { echo "cloud-collect: $command_name is required" >&2; exit 1; }
 done
 [[ -d "$VELASERVE_ARTIFACT_ROOT" && ! -L "$VELASERVE_ARTIFACT_ROOT" ]] || { echo "cloud-collect: artifact root must be an existing real directory" >&2; exit 1; }
-[[ -f "$VELASERVE_EPP_RECORDS_PATH" && ! -L "$VELASERVE_EPP_RECORDS_PATH" ]] || { echo "cloud-collect: normalized EPP JSONL is required" >&2; exit 1; }
+run_phase="$(jq -r '.phase' "$VELASERVE_ARTIFACT_ROOT/manifest.json")"
+if [[ "$run_phase" == "z0-c" && -z "${VELASERVE_P2P_TRANSFER_PATH:-}" ]]; then
+  echo "cloud-collect: Z0-C requires VELASERVE_P2P_TRANSFER_PATH from the measured model-runtime P2P path" >&2
+  exit 1
+fi
+[[ -f "$VELASERVE_EPP_LOG_PATH" && ! -L "$VELASERVE_EPP_LOG_PATH" ]] || { echo "cloud-collect: raw log from the pinned observational EPP build is required" >&2; exit 1; }
 [[ -f "$VELASERVE_ENVOY_RECORDS_PATH" && ! -L "$VELASERVE_ENVOY_RECORDS_PATH" ]] || { echo "cloud-collect: normalized Envoy JSONL is required" >&2; exit 1; }
-[[ ! -e "$VELASERVE_ARTIFACT_ROOT/.artifacts-collected" ]] || { echo "cloud-collect: bundle was already uploaded" >&2; exit 1; }
+[[ ! -e "$VELASERVE_ARTIFACT_ROOT/.artifacts-collected" && ! -L "$VELASERVE_ARTIFACT_ROOT/.artifacts-collected" ]] || { echo "cloud-collect: bundle was already uploaded or has an unsafe marker" >&2; exit 1; }
 
-cp "$VELASERVE_EPP_RECORDS_PATH" "$VELASERVE_ARTIFACT_ROOT/epp.jsonl"
+[[ ! -e "$VELASERVE_ARTIFACT_ROOT/epp.jsonl" && ! -L "$VELASERVE_ARTIFACT_ROOT/epp.jsonl" ]] || { echo "cloud-collect: epp.jsonl destination already exists" >&2; exit 1; }
+go run ./cmd/epp-normalize --input "$VELASERVE_EPP_LOG_PATH" --output "$VELASERVE_ARTIFACT_ROOT/epp.jsonl"
+[[ ! -e "$VELASERVE_ARTIFACT_ROOT/envoy.jsonl" && ! -L "$VELASERVE_ARTIFACT_ROOT/envoy.jsonl" ]] || { echo "cloud-collect: envoy.jsonl destination already exists" >&2; exit 1; }
 cp "$VELASERVE_ENVOY_RECORDS_PATH" "$VELASERVE_ARTIFACT_ROOT/envoy.jsonl"
-if [[ -n "${VELASERVE_SOURCE_PRESSURE_PATH:-}" ]]; then
-  [[ -f "$VELASERVE_SOURCE_PRESSURE_PATH" && ! -L "$VELASERVE_SOURCE_PRESSURE_PATH" ]] || { echo "cloud-collect: source-pressure path is not a regular file" >&2; exit 1; }
-  cp "$VELASERVE_SOURCE_PRESSURE_PATH" "$VELASERVE_ARTIFACT_ROOT/source-pressure.jsonl"
+if [[ -n "${VELASERVE_P2P_TRANSFER_PATH:-}" ]]; then
+  [[ "$run_phase" == "z0-c" ]] || { echo "cloud-collect: P2P transfer telemetry is valid only for Z0-C" >&2; exit 1; }
+  [[ -f "$VELASERVE_P2P_TRANSFER_PATH" && ! -L "$VELASERVE_P2P_TRANSFER_PATH" ]] || { echo "cloud-collect: P2P transfer path is not a regular file" >&2; exit 1; }
+  [[ ! -e "$VELASERVE_ARTIFACT_ROOT/p2p-transfers.jsonl" && ! -L "$VELASERVE_ARTIFACT_ROOT/p2p-transfers.jsonl" ]] || { echo "cloud-collect: P2P transfer destination already exists" >&2; exit 1; }
+  [[ ! -e "$VELASERVE_ARTIFACT_ROOT/source-pressure.jsonl" && ! -L "$VELASERVE_ARTIFACT_ROOT/source-pressure.jsonl" ]] || { echo "cloud-collect: source-pressure destination already exists" >&2; exit 1; }
+  cp "$VELASERVE_P2P_TRANSFER_PATH" "$VELASERVE_ARTIFACT_ROOT/p2p-transfers.jsonl"
+  (cd "$REPOSITORY_ROOT" && go run ./cmd/source-pressure-compile \
+    --groups "$VELASERVE_ARTIFACT_ROOT/groups.jsonl" \
+    --transfers "$VELASERVE_ARTIFACT_ROOT/p2p-transfers.jsonl" \
+    --output "$VELASERVE_ARTIFACT_ROOT/source-pressure.jsonl")
 fi
 
 cd "$REPOSITORY_ROOT"
@@ -42,6 +56,7 @@ go run ./cmd/zeroprobe analyze \
   --evidence-scope real_gpu
 
 snapshot_directory="$VELASERVE_ARTIFACT_ROOT/cloud-snapshot"
+[[ ! -e "$snapshot_directory" && ! -L "$snapshot_directory" ]] || { echo "cloud-collect: cloud snapshot destination already exists" >&2; exit 1; }
 mkdir -p "$snapshot_directory"
 kubectl --namespace "$VELASERVE_NAMESPACE" get pods,services,deployments,jobs -o yaml >"$snapshot_directory/workloads.yaml"
 kubectl get inferencepools.inference.networking.k8s.io --all-namespaces -o yaml >"$snapshot_directory/inferencepools.yaml"

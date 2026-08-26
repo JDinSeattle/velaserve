@@ -1,0 +1,60 @@
+{{- if .Values.conditionController.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: velaserve-condition-controller
+  labels:
+    app.kubernetes.io/name: velaserve-condition-controller
+    {{- include "velaserve.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: velaserve-condition-controller
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: velaserve-condition-controller
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: condition-controller
+          image: {{ include "velaserve.image" . }}
+          imagePullPolicy: {{ .Values.images.velaserve.pullPolicy }}
+          command: ["/app/condition-controller"]
+          env:
+            - name: VELASERVE_CONDITION_DRIVER_URL
+              value: {{ required "conditionController.driverURL is required when enabled" .Values.conditionController.driverURL | quote }}
+            - name: VELASERVE_CONTROLLER_REVISION
+              value: {{ required "conditionController.revision is required when enabled" .Values.conditionController.revision | quote }}
+            - name: VELASERVE_CONDITION_LISTEN
+              value: {{ printf ":%d" (int .Values.conditionController.port) | quote }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.conditionController.port }}
+          readinessProbe:
+            tcpSocket: {port: http}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: ["ALL"]}
+            readOnlyRootFilesystem: true
+          resources:
+            requests: {cpu: 25m, memory: 32Mi}
+            limits: {cpu: 250m, memory: 128Mi}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: velaserve-condition-controller
+spec:
+  selector:
+    app.kubernetes.io/name: velaserve-condition-controller
+  ports:
+    - name: http
+      port: {{ .Values.conditionController.port }}
+      targetPort: http
+{{- end }}

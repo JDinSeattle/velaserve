@@ -22,7 +22,6 @@ func PairedImprovementCI(baseline, candidate []float64, seed int64, repetitions 
 	if math.IsNaN(confidence) || confidence <= 0 || confidence >= 1 {
 		return evidence.ConfidenceInterval{}, fmt.Errorf("confidence must be in (0,1)")
 	}
-	improvements := make([]float64, len(baseline))
 	for index := range baseline {
 		if math.IsNaN(baseline[index]) || math.IsInf(baseline[index], 0) || baseline[index] <= 0 {
 			return evidence.ConfidenceInterval{}, fmt.Errorf("baseline[%d] must be finite and positive", index)
@@ -30,32 +29,37 @@ func PairedImprovementCI(baseline, candidate []float64, seed int64, repetitions 
 		if math.IsNaN(candidate[index]) || math.IsInf(candidate[index], 0) || candidate[index] < 0 {
 			return evidence.ConfidenceInterval{}, fmt.Errorf("candidate[%d] must be finite and non-negative", index)
 		}
-		improvements[index] = (baseline[index] - candidate[index]) / baseline[index]
 	}
+	estimate := p95Improvement(baseline, candidate)
 	bootstrap := make([]float64, repetitions)
+	baselineSample := make([]float64, len(baseline))
+	candidateSample := make([]float64, len(candidate))
 	random := rand.New(rand.NewPCG(uint64(seed), uint64(seed)^0x9e3779b97f4a7c15))
 	for repetition := range bootstrap {
-		sum := 0.0
-		for range improvements {
-			sum += improvements[random.IntN(len(improvements))]
+		for index := range baselineSample {
+			selected := random.IntN(len(baseline))
+			baselineSample[index] = baseline[selected]
+			candidateSample[index] = candidate[selected]
 		}
-		bootstrap[repetition] = sum / float64(len(improvements))
+		bootstrap[repetition] = p95Improvement(baselineSample, candidateSample)
 	}
 	sort.Float64s(bootstrap)
 	alpha := (1 - confidence) / 2
 	return evidence.ConfidenceInterval{
-		Estimate: mean(improvements),
+		Estimate: estimate,
 		Lower:    quantile(bootstrap, alpha),
 		Upper:    quantile(bootstrap, 1-alpha),
 	}, nil
 }
 
-func mean(values []float64) float64 {
-	sum := 0.0
-	for _, value := range values {
-		sum += value
-	}
-	return sum / float64(len(values))
+func p95Improvement(baseline, candidate []float64) float64 {
+	baselineSorted := append([]float64(nil), baseline...)
+	candidateSorted := append([]float64(nil), candidate...)
+	sort.Float64s(baselineSorted)
+	sort.Float64s(candidateSorted)
+	baselineP95 := quantile(baselineSorted, 0.95)
+	candidateP95 := quantile(candidateSorted, 0.95)
+	return (baselineP95 - candidateP95) / baselineP95
 }
 
 func quantile(sorted []float64, probability float64) float64 {

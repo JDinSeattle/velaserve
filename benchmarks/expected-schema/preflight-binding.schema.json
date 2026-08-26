@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/JDinSeattle/velaserve/schemas/preflight-binding-v1.json",
+  "title": "VelaServe real-GPU preflight binding v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "repository_commit", "aws_account_id", "aws_region", "cluster_arn", "namespace", "endpoint", "gateway_uid", "http_route_uid", "preregistration_sha256", "calibration_sha256", "active_arm", "transport", "model", "epp", "condition_controller", "nodes", "observed_at"],
+  "properties": {
+    "schema_version": {"const": "velaserve.preflight-binding/v1"},
+    "repository_commit": {"$ref": "#/$defs/commit"},
+    "aws_account_id": {"type": "string", "pattern": "^[0-9]{12}$"},
+    "aws_region": {"type": "string", "minLength": 1},
+    "cluster_arn": {"type": "string", "minLength": 1},
+    "namespace": {"type": "string", "minLength": 1},
+    "endpoint": {"type": "string", "format": "uri", "pattern": "^https?://"},
+    "gateway_uid": {"type": "string", "minLength": 1},
+    "http_route_uid": {"type": "string", "minLength": 1},
+    "preregistration_sha256": {"$ref": "#/$defs/sha256"},
+    "calibration_sha256": {"$ref": "#/$defs/sha256"},
+    "active_arm": {"enum": ["arm-a-affinity-p2p", "arm-b-load-aware-p2p"]},
+    "transport": {"enum": ["tcp", "efa"]},
+    "model": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["selector", "container", "workload", "id", "revision", "image", "minimum_replicas", "maximum_replicas", "pods"],
+      "properties": {
+        "selector": {"type": "string", "minLength": 1}, "container": {"type": "string", "minLength": 1}, "workload": {"type": "string", "minLength": 1}, "id": {"type": "string", "minLength": 1},
+        "revision": {"type": "string", "pattern": "^[0-9a-f]{40,64}$"}, "image": {"$ref": "#/$defs/image"},
+        "minimum_replicas": {"type": "integer", "minimum": 6, "maximum": 8}, "maximum_replicas": {"type": "integer", "minimum": 6, "maximum": 8},
+        "pods": {"type": "array", "minItems": 6, "maxItems": 8, "items": {"$ref": "#/$defs/pod"}}
+      }
+    },
+    "epp": {
+      "type": "object", "additionalProperties": false,
+      "required": ["selector", "container", "image", "replicas", "pods"],
+      "properties": {"selector": {"type": "string", "minLength": 1}, "container": {"type": "string", "minLength": 1}, "image": {"$ref": "#/$defs/image"}, "replicas": {"enum": [1, 2]}, "pods": {"type": "array", "minItems": 1, "maxItems": 2, "items": {"$ref": "#/$defs/pod"}}}
+    },
+    "condition_controller": {
+      "type": "object", "additionalProperties": false,
+      "required": ["selector", "container", "image", "revision", "pods"],
+      "properties": {"selector": {"type": "string", "minLength": 1}, "container": {"type": "string", "minLength": 1}, "image": {"$ref": "#/$defs/image"}, "revision": {"$ref": "#/$defs/commit"}, "pods": {"type": "array", "minItems": 1, "maxItems": 1, "items": {"$ref": "#/$defs/pod"}}}
+    },
+    "nodes": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/node"}},
+    "observed_at": {"type": "string", "format": "date-time"}
+  },
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "image": {"type": "string", "pattern": "^.+@sha256:[0-9a-f]{64}$"},
+    "pod": {"type": "object", "additionalProperties": false, "required": ["name", "uid", "image", "restart_count"], "properties": {"name": {"type": "string", "minLength": 1}, "uid": {"type": "string", "minLength": 1}, "image": {"$ref": "#/$defs/image"}, "restart_count": {"const": 0}}},
+    "node": {"type": "object", "additionalProperties": false, "required": ["name", "uid", "instance_type", "gpu_allocatable"], "properties": {"name": {"type": "string", "minLength": 1}, "uid": {"type": "string", "minLength": 1}, "instance_type": {"type": "string", "minLength": 1}, "gpu_allocatable": {"type": "integer", "minimum": 1}}}
+  }
+}

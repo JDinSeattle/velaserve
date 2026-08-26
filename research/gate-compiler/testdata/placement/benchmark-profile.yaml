@@ -1,0 +1,17 @@
+schema_version: velaserve.benchmark-profile/v1
+seed: 20260825
+run_id_prefix: compiler-test
+model: model
+max_width: 16
+timeout_ms: 1000
+repetitions: 20
+widths: [2, 4, 8, 16]
+arrival_skews_ms: [0, 1, 5, 20]
+arms: [arm-b-load-aware-p2p]
+prefixes: [{id: near, estimated_tokens: 4096, repeat_text: "x", repeat_count: 1}]
+outputs: [{id: short, max_tokens: 1}]
+load_regimes: [moderate]
+cache_states: [warm-owner]
+transports: [tcp]
+epp_replicas: [1]
+suffixes: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16"]

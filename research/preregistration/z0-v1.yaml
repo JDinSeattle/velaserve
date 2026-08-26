@@ -31,6 +31,17 @@ z0_a:
   arrival_skew_ms: [0, 1, 5, 20]
   simulator_endpoints: 8
   load_regimes: [idle, moderate, near-saturation]
+condition_contract:
+  load_fraction_of_measured_saturation:
+    idle: [0.00, 0.05]
+    moderate: [0.40, 0.60]
+    near_saturation: [0.85, 0.95]
+  cache_state:
+    cold_cached_endpoints: 0
+    warm_owner_cached_endpoints: 1
+    distributed_warm_minimum_cached_endpoints: 2
+  z0_c_cache_state: distributed-warm
+  z0_c_source_set_must_equal_cached_set: true
 z0_b:
   comparator: arm-b-load-aware-p2p
   oracle: offline-n-aware-oracle
@@ -72,4 +83,3 @@ upstream:
   llm_d: 3243fcf1191348b55c7811267a98117f8b7a6910
   llm_d_kv_cache: 8cf43067afb7fc9fefafc1b64de063c769f2c90f
   vllm: b1fbbc2ade51e3826bc92e4733c9c692ee21d42d
-

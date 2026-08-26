@@ -49,34 +49,41 @@ func TestGateFileWorkflowGeneratesSignsAndVerifiesDecision(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err = DecideFile(DecideFileOptions{
-		EvidencePath:        evidencePath,
-		PreregistrationPath: preregistrationPath,
-		LedgerPath:          ledgerPath,
-		OutputPath:          decisionPath,
-		DecisionID:          "gate-file-test",
-		EvidenceComplete:    true,
-		DecidedAt:           time.Date(2026, 8, 25, 22, 0, 0, 0, time.UTC),
+	preregistrationHash, _ := hashPath(preregistrationPath)
+	ledgerHash, _ := hashPath(ledgerPath)
+	evidenceHash, _ := hashPath(evidencePath)
+	decision, err := Decide(DecisionInput{
+		DecisionID: "gate-file-test", PreregistrationSHA256: preregistrationHash,
+		ArtifactLedgerSHA256: ledgerHash, EvidenceSHA256: evidenceHash,
+		Threshold: 0.10, Confidence: 0.95, EvidenceComplete: true,
+		Evidence: []evidence.GateEvidenceCell{
+			cell(2, "moderate", "above-crossover", "tcp", PlacementMetric, 0.11),
+			cell(4, "moderate", "above-crossover", "tcp", PlacementMetric, 0.12),
+		},
+		DecidedAt: time.Date(2026, 8, 25, 22, 0, 0, 0, time.UTC),
 	})
 	if err != nil {
-		t.Fatalf("DecideFile() error = %v", err)
+		t.Fatalf("Decide() error = %v", err)
 	}
-	decisionBytes, err := os.ReadFile(decisionPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var decision evidence.GateDecision
-	if err := json.Unmarshal(decisionBytes, &decision); err != nil {
+	decisionBytes, _ := json.MarshalIndent(decision, "", "  ")
+	if err := os.WriteFile(decisionPath, append(decisionBytes, '\n'), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if decision.Branch != evidence.BranchPlacement {
 		t.Fatalf("decision branch = %q, want placement", decision.Branch)
 	}
-	if err := SignDecisionFile(decisionPath, privatePath, signedPath); err != nil {
+	bindings := DecisionBindings{EvidencePath: evidencePath, PreregistrationPath: preregistrationPath, LedgerPath: ledgerPath}
+	if err := SignDecisionFile(decisionPath, privatePath, signedPath, bindings); err != nil {
 		t.Fatalf("SignDecisionFile() error = %v", err)
 	}
-	if err := VerifyDecisionFile(signedPath, publicPath); err != nil {
+	if err := VerifyDecisionFile(signedPath, publicPath, bindings); err != nil {
 		t.Fatalf("VerifyDecisionFile() error = %v", err)
+	}
+	if err := os.WriteFile(evidencePath, append([]byte{}, '{', '}'), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := VerifyDecisionFile(signedPath, publicPath, bindings); err == nil {
+		t.Fatal("VerifyDecisionFile() accepted replaced evidence")
 	}
 }
 

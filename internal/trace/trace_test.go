@@ -2,8 +2,11 @@ package trace
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"reflect"
 	"sort"
+	"strings"
 	"testing"
 
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
@@ -31,6 +34,26 @@ func TestGroupTraceContainsRequiredChildSpans(t *testing.T) {
 	sort.Strings(want)
 	if !reflect.DeepEqual(names, want) {
 		t.Fatalf("child spans = %v, want %v", names, want)
+	}
+}
+
+func TestJSONLExporterWritesRuntimeSpans(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "traces.jsonl")
+	exporter, err := NewJSONLExporter(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	provider := sdktrace.NewTracerProvider(sdktrace.WithSyncer(exporter))
+	New(provider.Tracer("test"), Limits{}).RecordLifecycle(context.Background(), GroupTrace{RunID: "run", GroupID: "group"})
+	if err := provider.Shutdown(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	contents, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(contents), `"name":"fanout-group"`) {
+		t.Fatalf("traces = %s", contents)
 	}
 }
 

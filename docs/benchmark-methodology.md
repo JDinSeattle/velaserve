@@ -16,7 +16,7 @@ The primary question is whether complete group width `N` exposes a material sche
 - Transport: declared TCP or EFA, never silently inferred.
 - Real evidence fleet: six to eight homogeneous GPU/model replicas.
 
-The repository profile expands deterministically and uses fixed sibling suffixes. Prompt text is sent to the model but intentionally excluded from evidence records.
+The repository profile expands deterministically and uses fixed sibling suffixes. Prompt text is sent to the model but intentionally excluded from evidence records. A real-GPU request is dispatched only after the configured condition driver returns measured offered, achieved, and saturation QPS plus exact shared-prefix cache owners. The frozen offered and achieved load bands are idle 0–5%, moderate 40–60%, and near saturation 85–95% of measured saturation. Cold has zero cache owners, warm-owner has one, and ordinary distributed-warm has at least two. Z0-C fixes the cache cell to distributed-warm and requires its exact 1/2/4 source set to equal the observed cached set. The group records that object with the controller revision, state digest, and applied timestamp; validation recomputes the digest. Missing, empty, changed, or mislabeled receipts stop the run or invalidate the bundle before gate compilation.
 
 ## Streaming measurement
 
@@ -39,7 +39,7 @@ Record the target vector, endpoint snapshot, excess collisions, and in-flight pu
 
 ### Z0-B — N-aware oracle regret
 
-Calibrate prefill throughput, pull throughput, cached bytes per token, service time, in-flight publication delay, and the affinity load gate on the chosen real stack. Hash that calibration. Replay observed snapshots through Arm B and the oracle, then compare predicted or measured all-of-N outcomes. A simulator opportunity must be confirmed on real GPUs.
+Calibrate prefill throughput, pull throughput, cached bytes per token, service time, in-flight publication delay, and the affinity load gate on the chosen real stack. Hash that calibration. The pinned EPP observer records the exact candidate snapshot and target; queue depth and the larger of running/published in-flight count become calibrated endpoint availability. Replay those same snapshots through Arm B and the oracle. A simulator opportunity must be confirmed on real GPUs.
 
 ### Z0-C — source pressure
 
@@ -47,9 +47,9 @@ With one, two, and four prefix sources, record selected source, concurrent pulls
 
 ## Statistical decision
 
-Pair observations by repetition, width, prefix regime, output regime, arrival skew, load, cache state, and transport. For each pair, compute `(baseline - candidate) / baseline`. Use 10,000 deterministic paired bootstrap repetitions and a 95% percentile confidence interval. Each decision cell requires at least 20 pairs.
+Pair observations by repetition, width, prefix regime, output regime, arrival skew, load, cache state, and transport. For each deterministic bootstrap repetition, resample pair indexes, recompute baseline p95 and candidate p95, then compute `(baseline_p95 - candidate_p95) / baseline_p95`. Report the observed paired-p95 estimate and a 95% percentile confidence interval across 10,000 resamples. Each decision cell requires at least 20 pairs.
 
-The placement branch passes only if the lower confidence bound is at least 0.10 for p95 group makespan in two adjacent widths within one declared load/prefix/transport regime. If placement fails, the source-pressure branch may pass when the same lower-bound threshold holds for p95 last-sibling TTFT. Otherwise the result is negative. Incomplete evidence always returns `insufficient-evidence` and cannot be signed.
+The compiler accepts exactly one complete real-GPU Z0-B bundle. It re-runs ledger verification, requires an identical deployment invariant across bundles, and recomputes cells from raw groups and oracle records. If placement does not pass, it additionally requires complete Z0-C bundles with attested prefix-source counts 1, 2, and 4 and recomputes their paired cells from raw groups and source observations. The placement branch passes only if the lower confidence bound is at least 0.10 for p95 group makespan in two adjacent widths within one load/prefix/transport regime. If placement fails, the source-pressure branch may pass when the same lower-bound threshold holds for p95 last-sibling TTFT. Otherwise the result is negative. There is no caller-provided completeness flag.
 
 ## Exclusions and retention
 

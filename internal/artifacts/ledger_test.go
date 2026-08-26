@@ -39,6 +39,19 @@ func TestVerifyDetectsChangedArtifact(t *testing.T) {
 	}
 }
 
+func TestVerifyRejectsMissingOrEmptyLedger(t *testing.T) {
+	root := t.TempDir()
+	if err := Verify(root); err == nil || !strings.Contains(err.Error(), "ledger") {
+		t.Fatalf("Verify() missing-ledger error = %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, LedgerName), nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := Verify(root); err == nil || !strings.Contains(err.Error(), "no entries") {
+		t.Fatalf("Verify() empty-ledger error = %v", err)
+	}
+}
+
 func TestRecordRejectsDuplicatePath(t *testing.T) {
 	root := t.TempDir()
 	writeArtifact(t, root, "raw/groups.jsonl", "original\n")

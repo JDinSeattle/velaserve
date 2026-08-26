@@ -98,10 +98,11 @@ func ReplayFile(options FileOptions) error {
 
 	records := make([]OracleRecord, 0, len(groups))
 	for _, item := range groups {
+		snapshot := withMeasuredAvailability(item.event.Snapshot, profile.Calibration.ServiceSeconds)
 		input := Input{
 			Width:                           item.event.FanoutWidth,
 			PrefixTokens:                    profile.PrefixTokens,
-			Snapshot:                        item.event.Snapshot,
+			Snapshot:                        snapshot,
 			Calibration:                     profile.Calibration,
 			ArrivalSkewSeconds:              float64(item.event.ArrivalSkewMS) / 1000,
 			InflightPublicationDelaySeconds: profile.InflightPublicationDelayMS / 1000,
@@ -132,6 +133,22 @@ func ReplayFile(options FileOptions) error {
 		}
 	}
 	return nil
+}
+
+func withMeasuredAvailability(snapshot evidence.EndpointSnapshot, serviceSeconds float64) evidence.EndpointSnapshot {
+	result := copySnapshot(snapshot)
+	for index := range result.Endpoints {
+		endpoint := &result.Endpoints[index]
+		inflight := endpoint.RunningRequests
+		if endpoint.ObservedInflight > inflight {
+			inflight = endpoint.ObservedInflight
+		}
+		measured := float64(endpoint.QueueDepth+inflight) * serviceSeconds
+		if measured > endpoint.AvailableAtSeconds {
+			endpoint.AvailableAtSeconds = measured
+		}
+	}
+	return result
 }
 
 func readProfile(path string) (ReplayProfile, error) {

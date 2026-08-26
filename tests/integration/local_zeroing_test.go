@@ -57,7 +57,7 @@ func TestLocalZeroingProducesVerifiedSimulationOnlyBundle(t *testing.T) {
 	if err := zeroprobe.Verify(root); err != nil {
 		t.Fatalf("zeroprobe.Verify() error = %v", err)
 	}
-	for _, name := range []string{"placements.jsonl", "oracle.jsonl", "ledger.jsonl", "analysis-report.json"} {
+	for _, name := range []string{"placements.jsonl", "oracle.jsonl", "ledger.jsonl", "analysis-report.json", "gate-evidence.jsonl", "metrics.prom", "traces.jsonl"} {
 		if _, err := os.Stat(filepath.Join(root, name)); err != nil {
 			t.Fatalf("missing %s: %v", name, err)
 		}

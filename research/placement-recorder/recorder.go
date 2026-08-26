@@ -60,6 +60,13 @@ type inputLine[T any] struct {
 }
 
 func ParseEPP(line []byte) (EPPRecord, error) {
+	const marker = "VELASERVE_EPP_RECORD "
+	if index := bytes.Index(line, []byte(marker)); index >= 0 {
+		line = line[index+len(marker):]
+		if end := bytes.IndexByte(line, '\n'); end >= 0 {
+			line = line[:end]
+		}
+	}
 	var record EPPRecord
 	if err := decodeStrict(line, &record); err != nil {
 		return EPPRecord{}, fmt.Errorf("decode EPP scheduling record: %w", err)

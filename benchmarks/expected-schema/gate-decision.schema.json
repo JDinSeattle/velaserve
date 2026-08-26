@@ -4,12 +4,13 @@
   "title": "VelaServe gate decision v1",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "decision_id", "preregistration_sha256", "artifact_ledger_sha256", "threshold", "confidence", "branch", "qualifying_widths", "evidence", "decided_at"],
+  "required": ["schema_version", "decision_id", "preregistration_sha256", "artifact_ledger_sha256", "evidence_sha256", "threshold", "confidence", "branch", "qualifying_widths", "evidence", "decided_at"],
   "properties": {
     "schema_version": {"const": "velaserve.evidence/v1"},
     "decision_id": {"type": "string", "minLength": 1},
     "preregistration_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
     "artifact_ledger_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "evidence_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
     "threshold": {"const": 0.1},
     "confidence": {"const": 0.95},
     "branch": {"enum": ["placement", "source-pressure", "negative-result", "insufficient-evidence"]},
@@ -34,10 +35,11 @@
         "prefix_regime": {"type": "string", "minLength": 1},
         "transport": {"type": "string", "minLength": 1},
         "metric": {"type": "string", "minLength": 1},
+		"baseline_source_count": {"enum": [1]},
+		"candidate_source_count": {"enum": [2, 4]},
         "pairs": {"type": "integer", "minimum": 20},
         "improvement": {"$ref": "#/$defs/interval"}
       }
     }
   }
 }
-

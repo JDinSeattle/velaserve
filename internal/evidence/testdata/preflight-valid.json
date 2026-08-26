@@ -1,0 +1,32 @@
+{
+  "schema_version": "velaserve.preflight-binding/v1",
+  "repository_commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "aws_account_id": "123456789012",
+  "aws_region": "us-west-2",
+  "cluster_arn": "arn:aws:eks:us-west-2:123456789012:cluster/velaserve-z0",
+  "namespace": "velaserve-z0",
+  "endpoint": "https://gateway.example/v1/chat/completions",
+  "gateway_uid": "gateway-uid",
+  "http_route_uid": "route-uid",
+  "preregistration_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "calibration_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+  "active_arm": "arm-b-load-aware-p2p",
+  "transport": "tcp",
+  "model": {
+    "selector": "app=velaserve-model", "container": "vllm", "workload": "velaserve-model", "id": "Qwen/Qwen3-8B",
+    "revision": "dddddddddddddddddddddddddddddddddddddddd", "image": "123456789012.dkr.ecr.us-west-2.amazonaws.com/model@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+    "minimum_replicas": 6, "maximum_replicas": 8,
+    "pods": [
+      {"name":"model-0","uid":"m0","image":"123456789012.dkr.ecr.us-west-2.amazonaws.com/model@sha256:1111111111111111111111111111111111111111111111111111111111111111","restart_count":0},
+      {"name":"model-1","uid":"m1","image":"123456789012.dkr.ecr.us-west-2.amazonaws.com/model@sha256:1111111111111111111111111111111111111111111111111111111111111111","restart_count":0},
+      {"name":"model-2","uid":"m2","image":"123456789012.dkr.ecr.us-west-2.amazonaws.com/model@sha256:1111111111111111111111111111111111111111111111111111111111111111","restart_count":0},
+      {"name":"model-3","uid":"m3","image":"123456789012.dkr.ecr.us-west-2.amazonaws.com/model@sha256:1111111111111111111111111111111111111111111111111111111111111111","restart_count":0},
+      {"name":"model-4","uid":"m4","image":"123456789012.dkr.ecr.us-west-2.amazonaws.com/model@sha256:1111111111111111111111111111111111111111111111111111111111111111","restart_count":0},
+      {"name":"model-5","uid":"m5","image":"123456789012.dkr.ecr.us-west-2.amazonaws.com/model@sha256:1111111111111111111111111111111111111111111111111111111111111111","restart_count":0}
+    ]
+  },
+  "epp": {"selector":"llm-d-router-gateway=velaserve-epp","container":"epp","image":"123456789012.dkr.ecr.us-west-2.amazonaws.com/epp@sha256:2222222222222222222222222222222222222222222222222222222222222222","replicas":1,"pods":[{"name":"epp-0","uid":"e0","image":"123456789012.dkr.ecr.us-west-2.amazonaws.com/epp@sha256:2222222222222222222222222222222222222222222222222222222222222222","restart_count":0}]},
+  "condition_controller": {"selector":"app=controller","container":"condition-controller","image":"123456789012.dkr.ecr.us-west-2.amazonaws.com/velaserve@sha256:3333333333333333333333333333333333333333333333333333333333333333","revision":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","pods":[{"name":"controller-0","uid":"c0","image":"123456789012.dkr.ecr.us-west-2.amazonaws.com/velaserve@sha256:3333333333333333333333333333333333333333333333333333333333333333","restart_count":0}]},
+  "nodes": [{"name":"node-0","uid":"n0","instance_type":"g6e.xlarge","gpu_allocatable":1}],
+  "observed_at": "2026-08-26T08:00:00Z"
+}

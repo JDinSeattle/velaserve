@@ -13,6 +13,8 @@
 | Changed preregistration/calibration | Git and SHA-256 preflight | Cloud run refuses to start |
 | Wrong AWS account, region, cluster, or kubectl context | Exact preflight checks | No benchmark request is sent |
 | Floating/missing image identity | Required ECR `@sha256:` references | Cloud run refuses to start |
+| Workload, image, pod, node, arm, or controller drift between runs | Ledgered preflight bindings and gate invariant comparison | Gate compilation refuses mixed bundles |
+| Condition driver returns an empty/mismatched state or recorded state is changed | Per-group observed-state validation and SHA-256 | Request is not sent or bundle verification fails |
 | Fewer than six or heterogeneous model replicas | Pod readiness/node-label preflight | Real-GPU evidence run refuses to start |
 | Insufficient GPU quota | Service Quotas check | Real-GPU evidence run refuses to start |
 | EFA requested without node resource | Node allocatable check | Preflight fails; transport cannot be relabeled TCP |

@@ -1,0 +1,20 @@
+{
+  "schema_version": "velaserve.preflight-binding/v1",
+  "repository_commit": "not-a-commit",
+  "aws_account_id": "123",
+  "aws_region": "us-west-2",
+  "cluster_arn": "cluster",
+  "namespace": "velaserve-z0",
+  "endpoint": "not-a-url",
+  "gateway_uid": "",
+  "http_route_uid": "",
+  "preregistration_sha256": "bad",
+  "calibration_sha256": "bad",
+  "active_arm": "arm-c-velaserve-placement-p2p",
+  "transport": "tcp",
+  "model": {},
+  "epp": {},
+  "condition_controller": {},
+  "nodes": [],
+  "observed_at": "not-a-time"
+}

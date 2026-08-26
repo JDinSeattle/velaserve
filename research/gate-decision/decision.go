@@ -21,6 +21,7 @@ type DecisionInput struct {
 	DecisionID            string
 	PreregistrationSHA256 string
 	ArtifactLedgerSHA256  string
+	EvidenceSHA256        string
 	Threshold             float64
 	Confidence            float64
 	EvidenceComplete      bool
@@ -39,6 +40,7 @@ func Decide(input DecisionInput) (evidence.GateDecision, error) {
 		DecisionID:            input.DecisionID,
 		PreregistrationSHA256: input.PreregistrationSHA256,
 		ArtifactLedgerSHA256:  input.ArtifactLedgerSHA256,
+		EvidenceSHA256:        input.EvidenceSHA256,
 		Threshold:             input.Threshold,
 		Confidence:            input.Confidence,
 		Evidence:              cells,
@@ -122,6 +124,9 @@ func validateDecisionInput(input DecisionInput) error {
 	if !isLowerHexSHA256(input.ArtifactLedgerSHA256) {
 		return fmt.Errorf("artifact ledger SHA-256 must be 64 lowercase hexadecimal characters")
 	}
+	if !isLowerHexSHA256(input.EvidenceSHA256) {
+		return fmt.Errorf("evidence SHA-256 must be 64 lowercase hexadecimal characters")
+	}
 	if math.Abs(input.Threshold-0.10) > 1e-12 {
 		return fmt.Errorf("threshold %.6f does not match preregistered 0.10", input.Threshold)
 	}
@@ -144,6 +149,12 @@ func validateDecisionInput(input DecisionInput) error {
 		if cell.Metric != PlacementMetric && cell.Metric != SourcePressureMetric {
 			return fmt.Errorf("evidence[%d] has unsupported metric %q", index, cell.Metric)
 		}
+		if cell.Metric == PlacementMetric && (cell.BaselineSourceCount != 0 || cell.CandidateSourceCount != 0) {
+			return fmt.Errorf("evidence[%d] placement metric cannot contain source counts", index)
+		}
+		if cell.Metric == SourcePressureMetric && (cell.BaselineSourceCount != 1 || (cell.CandidateSourceCount != 2 && cell.CandidateSourceCount != 4)) {
+			return fmt.Errorf("evidence[%d] source-pressure metric must compare one source with two or four sources", index)
+		}
 		interval := cell.Improvement
 		if nonFinite(interval.Estimate) || nonFinite(interval.Lower) || nonFinite(interval.Upper) || interval.Lower > interval.Estimate || interval.Estimate > interval.Upper {
 			return fmt.Errorf("evidence[%d] has invalid confidence interval", index)
@@ -161,6 +172,9 @@ func cellLess(left, right evidence.GateEvidenceCell) bool {
 	rightKey := regimeKey(right) + "\x00" + right.Metric
 	if leftKey != rightKey {
 		return leftKey < rightKey
+	}
+	if left.CandidateSourceCount != right.CandidateSourceCount {
+		return left.CandidateSourceCount < right.CandidateSourceCount
 	}
 	return left.FanoutWidth < right.FanoutWidth
 }

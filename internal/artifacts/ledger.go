@@ -53,9 +53,20 @@ func Record(root, relativePath string) (Entry, error) {
 }
 
 func Verify(root string) error {
+	ledgerPath := filepath.Join(root, LedgerName)
+	ledgerInfo, err := os.Lstat(ledgerPath)
+	if err != nil {
+		return fmt.Errorf("inspect artifact ledger: %w", err)
+	}
+	if !ledgerInfo.Mode().IsRegular() {
+		return fmt.Errorf("artifact ledger is not a regular file")
+	}
 	entries, err := readLedger(root)
 	if err != nil {
 		return err
+	}
+	if len(entries) == 0 {
+		return fmt.Errorf("artifact ledger contains no entries")
 	}
 	seen := make(map[string]struct{}, len(entries))
 	for index, entry := range entries {

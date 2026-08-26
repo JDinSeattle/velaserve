@@ -46,3 +46,22 @@ func TestPairedImprovementCIRejectsFewerThanTwentyPairs(t *testing.T) {
 		t.Fatal("PairedImprovementCI() error = nil, want minimum-pair rejection")
 	}
 }
+
+func TestPairedImprovementCIMeasuresP95InsteadOfMeanPerPair(t *testing.T) {
+	baseline := make([]float64, 100)
+	candidate := make([]float64, 100)
+	for index := range baseline {
+		baseline[index] = 1
+		candidate[index] = 0.5
+		if index >= 90 {
+			candidate[index] = 2
+		}
+	}
+	got, err := PairedImprovementCI(baseline, candidate, 20260825, 10_000, 0.95)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Estimate >= 0 {
+		t.Fatalf("p95 improvement estimate = %v, want regression below zero", got.Estimate)
+	}
+}

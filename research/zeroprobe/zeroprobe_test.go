@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -96,5 +97,38 @@ suffixes: ["01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12
 	}
 	if got := completion.Failure; got != fmt.Sprintf("16 failed groups and %d cancelled groups", completion.CancelledGroups) {
 		t.Fatalf("failure = %q", got)
+	}
+}
+
+func TestRunRejectsZ0CWithoutRegisteredSourceCondition(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "z0-c")
+	_, err := Run(context.Background(), RunOptions{
+		PrepareOptions:       PrepareOptions{Phase: PhaseZ0C, PreregistrationPath: filepath.Join("..", "preregistration", "z0-v1.yaml"), ArtifactRoot: root},
+		BenchmarkProfilePath: filepath.Join("..", "..", "benchmarks", "profiles", "local-calibration.yaml"),
+	})
+	if err == nil || !strings.Contains(err.Error(), "prefix source count") {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if _, statErr := os.Stat(root); !os.IsNotExist(statErr) {
+		t.Fatalf("invalid Z0-C run created artifact root: %v", statErr)
+	}
+}
+
+func TestRunRequiresPreflightBindingBeforeConditionAttestedTraffic(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "real-gpu")
+	_, err := Run(context.Background(), RunOptions{
+		PrepareOptions: PrepareOptions{
+			Phase:               PhaseZ0B,
+			PreregistrationPath: filepath.Join("..", "preregistration", "z0-v1.yaml"),
+			ArtifactRoot:        root,
+		},
+		BenchmarkProfilePath:        filepath.Join("..", "..", "benchmarks", "profiles", "aws-z0-template.yaml"),
+		RequireConditionAttestation: true,
+	})
+	if err == nil || !strings.Contains(err.Error(), "preflight binding") {
+		t.Fatalf("Run() error = %v, want preflight-binding refusal", err)
+	}
+	if _, statErr := os.Stat(root); !os.IsNotExist(statErr) {
+		t.Fatalf("missing preflight binding created artifact root: %v", statErr)
 	}
 }

@@ -15,7 +15,10 @@ No production placement or source-pressure coordination code exists. The reposit
 | Append-only artifact ledger and verification | complete |
 | Deterministic simulator and local verified bundle | complete, `simulation_only` |
 | Pinned llm-d Router Kind/Envoy SSE smoke | complete locally |
-| Offline N-aware replay and paired statistics | complete |
+| Pinned llm-d observational adapter and raw-log normalizer | complete locally |
+| Condition driver/controller, per-group receipts, and strict P2P transfer join | complete; environment adapters are operator-supplied |
+| Offline N-aware replay and paired-p95 statistics | complete |
+| Ledger-derived gate compiler and tamper-bound signing | complete locally |
 | Real-GPU calibration | not run |
 | Six-to-eight-replica Z0-A/B/C evidence | not run |
 | Complete ledger-bound gate cells | not run |

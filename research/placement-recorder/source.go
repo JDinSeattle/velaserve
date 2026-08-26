@@ -66,6 +66,9 @@ func ValidateSourcePressure(record SourcePressureObservation) error {
 	if record.ObservedAt.IsZero() {
 		return fmt.Errorf("observed_at: required")
 	}
+	if record.CandidateSourceCount != 1 && record.CandidateSourceCount != 2 && record.CandidateSourceCount != 4 {
+		return fmt.Errorf("candidate_source_count must be 1, 2, or 4")
+	}
 	if record.SourceNICBytesPerSecond != nil && !finiteNonNegativeSource(*record.SourceNICBytesPerSecond) {
 		return fmt.Errorf("source_nic_bytes_per_second must be finite and non-negative")
 	}
@@ -76,9 +79,6 @@ func ValidateSourcePressure(record SourcePressureObservation) error {
 	case AcquisitionP2P:
 		if record.ChosenSource == nil || strings.TrimSpace(record.ChosenSource.ID) == "" || strings.TrimSpace(record.ChosenSource.Model) == "" {
 			return fmt.Errorf("chosen_source: required for p2p acquisition")
-		}
-		if record.CandidateSourceCount == 0 {
-			return fmt.Errorf("candidate_source_count: must be positive for p2p acquisition")
 		}
 		if record.TransferBytes == nil || *record.TransferBytes == 0 {
 			return fmt.Errorf("transfer_bytes: positive measurement required for p2p acquisition")

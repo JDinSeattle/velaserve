@@ -45,6 +45,12 @@ fanoutbench:
     type: emptyDir
     claimName: ""
 
+conditionController:
+  enabled: false
+  driverURL: ""
+  revision: ""
+  port: 8082
+
 upstream:
   llmDRouterCommit: ab723b898f8598ab6631e9848a4cf28accd9b9ea
   llmDCommit: 3243fcf1191348b55c7811267a98117f8b7a6910
