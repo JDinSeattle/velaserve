@@ -1,0 +1,22 @@
+{
+  "schema_version": "velaserve.evidence/v1",
+  "decision_id": "gate-fixture-1",
+  "preregistration_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "artifact_ledger_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "threshold": 0.1,
+  "confidence": 0.95,
+  "branch": "placement",
+  "qualifying_widths": [4, 8],
+  "evidence": [
+    {
+      "fanout_width": 4,
+      "load_regime": "moderate",
+      "prefix_regime": "above-crossover",
+      "transport": "tcp",
+      "metric": "p95_group_makespan_seconds",
+      "pairs": 20,
+      "improvement": {"estimate": 0.15, "lower": 0.11, "upper": 0.19}
+    }
+  ],
+  "decided_at": "2026-08-25T22:00:00Z"
+}

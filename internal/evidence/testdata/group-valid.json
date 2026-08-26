@@ -1,0 +1,30 @@
+{
+  "schema_version": "velaserve.evidence/v1",
+  "run_id": "fixture-run",
+  "arm": "arm-b-load-aware-p2p",
+  "group_id": "01K39J6FJ4N5W7V57QK9Q0C6CF",
+  "fanout_width": 2,
+  "makespan_seconds": 1.5,
+  "slowest_child_ttft_seconds": 0.5,
+  "recomputed_prefix_tokens": 4096,
+  "outcome": "success",
+  "children": [
+    {
+      "request_id": "fixture-request-1",
+      "target": {"id": "sim-0", "model": "test-model"},
+      "ttft_seconds": 0.4,
+      "latency_seconds": 1.3,
+      "output_tokens": 32,
+      "outcome": "success"
+    },
+    {
+      "request_id": "fixture-request-2",
+      "target": {"id": "sim-1", "model": "test-model"},
+      "ttft_seconds": 0.5,
+      "latency_seconds": 1.5,
+      "output_tokens": 32,
+      "outcome": "success"
+    }
+  ]
+}
+

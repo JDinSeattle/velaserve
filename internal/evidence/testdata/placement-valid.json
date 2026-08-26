@@ -1,0 +1,29 @@
+{
+  "schema_version": "velaserve.evidence/v1",
+  "run_id": "fixture-run",
+  "arm": "arm-b-load-aware-p2p",
+  "group_id": "01K39J6FJ4N5W7V57QK9Q0C6CF",
+  "request_id": "fixture-request-1",
+  "fanout_width": 2,
+  "arrival_skew_ms": 1,
+  "epp_replicas": 2,
+  "load_regime": "moderate",
+  "snapshot": {
+    "observed_at": "2026-08-25T20:00:00Z",
+    "endpoints": [
+      {
+        "ref": {"id": "sim-0", "model": "test-model"},
+        "healthy": true,
+        "compatible": true,
+        "available_at_seconds": 0.25,
+        "queue_depth": 1,
+        "running_requests": 2,
+        "local_prefix_tokens": 4096,
+        "observed_inflight": 2
+      }
+    ]
+  },
+  "target": {"id": "sim-0", "model": "test-model"},
+  "observed_at": "2026-08-25T20:00:00Z"
+}
+
