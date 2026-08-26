@@ -52,6 +52,37 @@ func TestVerifyRejectsMissingOrEmptyLedger(t *testing.T) {
 	}
 }
 
+func TestRequireLedgerEntriesRejectsExistingButUnlistedArtifact(t *testing.T) {
+	root := t.TempDir()
+	writeArtifact(t, root, "manifest.json", "{}\n")
+	writeArtifact(t, root, "load-calibration.json", "{}\n")
+	if _, err := Record(root, "manifest.json"); err != nil {
+		t.Fatal(err)
+	}
+	if err := Verify(root); err != nil {
+		t.Fatal(err)
+	}
+
+	err := RequireLedgerEntries(root, "manifest.json", "load-calibration.json")
+	if err == nil || !strings.Contains(err.Error(), "load-calibration.json") || !strings.Contains(err.Error(), "absent") {
+		t.Fatalf("RequireLedgerEntries() error = %v, want unlisted artifact rejection", err)
+	}
+}
+
+func TestRequireLedgerEntriesAcceptsVerifiedMembership(t *testing.T) {
+	root := t.TempDir()
+	writeArtifact(t, root, "manifest.json", "{}\n")
+	if _, err := Record(root, "manifest.json"); err != nil {
+		t.Fatal(err)
+	}
+	if err := Verify(root); err != nil {
+		t.Fatal(err)
+	}
+	if err := RequireLedgerEntries(root, "manifest.json"); err != nil {
+		t.Fatalf("RequireLedgerEntries() error = %v", err)
+	}
+}
+
 func TestRecordRejectsDuplicatePath(t *testing.T) {
 	root := t.TempDir()
 	writeArtifact(t, root, "raw/groups.jsonl", "original\n")

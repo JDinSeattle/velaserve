@@ -132,3 +132,59 @@ func TestRunRequiresPreflightBindingBeforeConditionAttestedTraffic(t *testing.T)
 		t.Fatalf("missing preflight binding created artifact root: %v", statErr)
 	}
 }
+
+func TestRequiredArtifactPathsCoverStageSpecificCompilerInputs(t *testing.T) {
+	common := strings.Join(requiredArtifactPaths(PhaseZ0A), "\n")
+	for _, required := range []string{
+		"manifest.json", "preregistration.yaml", "benchmark-profile.yaml", "groups.jsonl",
+		"envoy.jsonl", "epp.jsonl", "placements.jsonl", "unmatched.jsonl", "ingest-report.json",
+		"oracle-calibration.yaml", "oracle.jsonl", "analysis-metrics.prom", "gate-evidence.jsonl", "analysis-report.json",
+	} {
+		if !strings.Contains(common, required) {
+			t.Fatalf("common required paths omit %q", required)
+		}
+	}
+	z0c := strings.Join(requiredArtifactPaths(PhaseZ0C), "\n")
+	for _, required := range []string{"condition.json", "vllm-runtime.jsonl", "p2p-transfers.jsonl", "source-pressure.jsonl"} {
+		if !strings.Contains(z0c, required) {
+			t.Fatalf("Z0-C required paths omit %q", required)
+		}
+	}
+	realGPU := strings.Join(realGPURequiredArtifactPaths(), "\n")
+	for _, required := range []string{"preflight-binding.json", "profile-calibration.json", "load-calibration.json"} {
+		if !strings.Contains(realGPU, required) {
+			t.Fatalf("real-GPU required paths omit %q", required)
+		}
+	}
+}
+
+func TestValidateVerificationMetricsIsCanonicalLedgeredAndReadOnly(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "manifest.json"), []byte("{}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := artifacts.Record(root, "manifest.json"); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeVerificationMetrics(root); err != nil {
+		t.Fatal(err)
+	}
+	ledgerBefore, err := os.ReadFile(filepath.Join(root, artifacts.LedgerName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := validateVerificationMetrics(root); err != nil {
+		t.Fatal(err)
+	}
+	ledgerAfter, err := os.ReadFile(filepath.Join(root, artifacts.LedgerName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(ledgerAfter) != string(ledgerBefore) {
+		t.Fatal("read-only verification metrics validation mutated the ledger")
+	}
+	contents, err := os.ReadFile(filepath.Join(root, "verification-metrics.prom"))
+	if err != nil || string(contents) != verifiedArtifactMetrics {
+		t.Fatalf("verification metrics = %q, error = %v", contents, err)
+	}
+}

@@ -2,11 +2,14 @@ package bench
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"sort"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -130,6 +133,131 @@ func TestRunGroupCancellationStillRetainsEveryChild(t *testing.T) {
 		if child.Outcome != evidence.OutcomeCancelled || child.Failure == "" {
 			t.Fatalf("child %d = %#v", slot, child)
 		}
+	}
+}
+
+func TestRunGroupCancellationBeforeStaggeredDispatchRemainsEvidence(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	defer server.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	client := Client{Endpoint: server.URL, HTTPClient: server.Client(), MaxEventBytes: 1 << 20}
+	result, err := client.RunGroup(ctx, GroupRequest{
+		RunID: "bench-run-cancelled-before-dispatch", Arm: evidence.ArmLoadAwareP2P, Model: "test-model",
+		CommonPrefix: "shared prefix: ", Suffixes: []string{"a", "b", "c", "d"}, MaxTokens: 8, MaxWidth: 16,
+		ArrivalSkew: 20 * time.Millisecond, Timeout: 2 * time.Second, Cell: benchmarkCell(8, 20),
+	})
+	if err != nil {
+		t.Fatalf("RunGroup() discarded pre-dispatch cancellation evidence: %v", err)
+	}
+	missingDispatch := 0
+	for _, child := range result.Children {
+		if child.DispatchedAt == nil {
+			missingDispatch++
+		}
+	}
+	if result.Outcome != evidence.OutcomeCancelled || missingDispatch == 0 {
+		t.Fatalf("result = %#v, want retained pre-dispatch cancellations", result)
+	}
+}
+
+func TestRunGroupRetainsChildrenAndAppliedConditionWhenFinalizeFails(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		switch request.URL.Path {
+		case "/model":
+			writer.Header().Set("Content-Type", "text/event-stream")
+			fmt.Fprint(writer, "data: {\"choices\":[{\"delta\":{\"content\":\"ok\"}}]}\n\n")
+			fmt.Fprint(writer, "data: {\"choices\":[],\"usage\":{\"completion_tokens\":1}}\n\n")
+			fmt.Fprint(writer, "data: [DONE]\n\n")
+		case "/v1/conditions/apply":
+			var applied conditionRequest
+			if err := json.NewDecoder(request.Body).Decode(&applied); err != nil {
+				http.Error(writer, err.Error(), http.StatusBadRequest)
+				return
+			}
+			state := evidence.ConditionObservedState{
+				OfferedLoadQPS: 50, AchievedLoadQPS: 50, SaturationQPS: 100,
+				LoadProfileSHA256: strings.Repeat("1", 64), LoadProfilesSHA256: strings.Repeat("2", 64), LoadCalibrationSHA256: strings.Repeat("3", 64),
+				CachedEndpointIDs: []string{"model-0"}, OwnerEndpointOrder: []string{"model-0", "model-1"}, DrainedEndpointIDs: []string{"model-0", "model-1"},
+				DrainStableSamples: 2, OrdinaryTrafficMeanLatencySeconds: .01, MeasurementSource: "load-calibration:" + strings.Repeat("3", 64),
+			}
+			attestation := evidence.ConditionAttestation{
+				SchemaVersion: evidence.ConditionAttestationSchemaVersion, RunID: applied.RunID, GroupID: applied.GroupID,
+				LoadRegime: applied.Cell.LoadRegime, CacheState: applied.Cell.CacheState, PrefixSourceCount: applied.PrefixSourceCount,
+				OwnerRotation: applied.OwnerRotation, ControllerRevision: strings.Repeat("a", 40), ObservedState: state, AppliedAt: time.Now().UTC().Add(-time.Second),
+			}
+			attestation.StateSHA256 = conditionStateHashForTest(attestation)
+			writer.Header().Set("Content-Type", "application/json")
+			if err := json.NewEncoder(writer).Encode(attestation); err != nil {
+				t.Error(err)
+			}
+		case "/v1/conditions/finalize":
+			http.Error(writer, "measured load left registered band", http.StatusConflict)
+		default:
+			http.NotFound(writer, request)
+		}
+	}))
+	defer server.Close()
+
+	client := Client{
+		Endpoint: server.URL + "/model", HTTPClient: server.Client(), MaxEventBytes: 1 << 20,
+		ConditionControllerEndpoint: server.URL + "/v1/conditions/apply", ConditionControlToken: "test-token", RequireConditionAttestation: true,
+	}
+	result, err := client.RunGroup(context.Background(), GroupRequest{
+		RunID: "bench-run-finalize-failure", Arm: evidence.ArmLoadAwareP2P, Model: "test-model",
+		CommonPrefix: "shared prefix: ", WarmupContent: "shared prefix: warmup", Suffixes: []string{"a", "b"},
+		MaxTokens: 8, MaxWidth: 16, Timeout: 2 * time.Second, Cell: benchmarkCell(8, 0),
+	})
+	if err == nil || !strings.Contains(err.Error(), "finalize workload condition") {
+		t.Fatalf("RunGroup() error = %v, want finalization failure", err)
+	}
+	if result.GroupID == "" || len(result.Children) != 2 || result.Outcome != evidence.OutcomeFailure || result.Condition == nil || result.Condition.FinalizedAt != nil || result.ConditionFailure == "" {
+		t.Fatalf("retained group = %#v", result)
+	}
+	if validationErr := evidence.ValidateGroupResult(result); validationErr != nil {
+		t.Fatalf("retained finalization failure is not valid evidence: %v", validationErr)
+	}
+}
+
+func conditionStateHashForTest(condition evidence.ConditionAttestation) string {
+	state := struct {
+		SchemaVersion     string                          `json:"schema_version"`
+		LoadRegime        evidence.LoadRegime             `json:"load_regime"`
+		CacheState        string                          `json:"cache_state"`
+		PrefixSourceCount uint32                          `json:"prefix_source_count,omitempty"`
+		OwnerRotation     uint32                          `json:"owner_rotation"`
+		ObservedState     evidence.ConditionObservedState `json:"observed_state"`
+	}{"velaserve.applied-condition/v1", condition.LoadRegime, condition.CacheState, condition.PrefixSourceCount, condition.OwnerRotation, condition.ObservedState}
+	encoded, _ := json.Marshal(state)
+	digest := sha256.Sum256(encoded)
+	return hex.EncodeToString(digest[:])
+}
+
+func TestSummarizeGroupComputesRecomputedSharedPrefixTokens(t *testing.T) {
+	cachedFirst := uint64(1000)
+	cachedSecond := uint64(4500)
+	result := summarizeGroup(GroupRequest{
+		RunID: "run", Arm: evidence.ArmLoadAwareP2P, Cell: benchmarkCell(8, 0),
+	}, "group", []evidence.ChildResult{
+		{RequestID: "request-a", Outcome: evidence.OutcomeSuccess, PromptTokens: 5000, CachedTokens: &cachedFirst},
+		{RequestID: "request-b", Outcome: evidence.OutcomeSuccess, PromptTokens: 5000, CachedTokens: &cachedSecond},
+	})
+	if result.RecomputedPrefixTokens == nil || *result.RecomputedPrefixTokens != 3096 {
+		t.Fatalf("RecomputedPrefixTokens = %v, want 3096", result.RecomputedPrefixTokens)
+	}
+}
+
+func TestSummarizeGroupLeavesRecomputedTokensUnmeasuredWithoutCacheReadback(t *testing.T) {
+	cached := uint64(1000)
+	result := summarizeGroup(GroupRequest{
+		RunID: "run", Arm: evidence.ArmLoadAwareP2P, Cell: benchmarkCell(8, 0),
+	}, "group", []evidence.ChildResult{
+		{RequestID: "request-a", Outcome: evidence.OutcomeSuccess, PromptTokens: 5000, CachedTokens: &cached},
+		{RequestID: "request-b", Outcome: evidence.OutcomeSuccess, PromptTokens: 5000},
+	})
+	if result.RecomputedPrefixTokens != nil {
+		t.Fatalf("RecomputedPrefixTokens = %v, want unmeasured", *result.RecomputedPrefixTokens)
 	}
 }
 

@@ -14,7 +14,7 @@ No production placement or source-pressure mechanism has been implemented. Stage
 - A Go best-of-N streaming client that validates OpenAI-compatible SSE through semantic output and `[DONE]`, and records every child, including failures and cancellations.
 - An eight-endpoint deterministic simulator for pipeline calibration only. Simulator output is always `simulation_only` evidence.
 - A deterministic N-aware offline oracle that evaluates local hit, P2P pull, and recompute cost against the same endpoint snapshots as the upstream arms.
-- Envoy/EPP record correlation, condition-attested groups, strict model-runtime P2P transfer joins, append-only SHA-256 artifact ledgers, paired-p95 bootstrap confidence intervals, and a ledger-derived gate compiler.
+- Envoy/EPP record correlation, repository-provided cache/load conditioning, condition-attested groups, strict model-runtime P2P transfer joins, append-only SHA-256 artifact ledgers, paired-p95 bootstrap confidence intervals, and a ledger-derived gate compiler.
 - Pinned Helm/Kind manifests that build and exercise the exact llm-d-router commit through Envoy Gateway and Gateway API Inference Extension.
 - Terraform for a dedicated EKS experiment environment, immutable ECR repositories, a versioned encrypted S3 evidence bucket, Karpenter prerequisites, and scale-to-zero GPU capacity. Repository scripts never apply or destroy Terraform.
 
@@ -58,11 +58,13 @@ The first command applies the small observational patch to the exact pinned llm-
 The repository performs no AWS mutation on its own. The operator reviews the Terraform plan, applies infrastructure manually, deploys six to eight homogeneous vLLM replicas behind the declared `velaserve-model` service, pushes digest-addressed images, and then runs the guarded sequence:
 
 ```text
-cloud-preflight.sh -> condition-attested cloud-run-z0.sh -> export raw EPP + Envoy records
-                   -> cloud-collect.sh -> cloud-cleanup.sh
+cloud-calibrate-crossover.sh -> cloud-freeze-profile.sh -> apply measured threshold
+  -> cloud-calibrate-load.sh -> oracle-calibration -> enable condition driver
+  -> cloud-preflight.sh -> condition-attested cloud-run-z0.sh
+  -> cloud-collect.sh -> cloud-cleanup.sh
 ```
 
-The preflight checks AWS identity, region, exact EKS cluster, GPU quota, the six-to-eight replica bound, one-GPU requests/limits, restart-free homogeneous model pods, model/controller revisions, exact model/EPP/controller image digests, deployed routing/EPP contracts, absence of model HPA, preregistration/calibration hashes, transport, bucket, kubectl context, and endpoint reachability. Every real group requires a condition-controller receipt that matches its load, cache, and (for Z0-C) source-count state. Collection normalizes only the marker emitted by the pinned EPP observer, verifies the artifact ledger, and uploads to a unique S3 run prefix.
+The calibration helpers open their own per-Pod tunnels and derive the routing threshold, workload token regimes, load profiles, and oracle cost model from retained raw observations. Preflight then checks AWS identity, region, exact EKS cluster, GPU quota, the six-to-eight replica bound, one-GPU requests/limits, required vLLM cache/readback flags, restart-free homogeneous model pods, node/runtime/GPU-driver identity, model/controller revisions, exact image digests and pod-spec hashes, deployed route/router contracts, absence of model HPA, calibration bindings, transport, bucket, kubectl context, and endpoint reachability. Every real group requires a condition-driver receipt backed by exact cache-token and load readback. Collection re-runs preflight to prove start/end deployment identity, normalizes the raw observer streams, verifies the artifact ledger, and uploads to a unique S3 run prefix.
 
 Follow [the cloud handoff runbook](docs/cloud-handoff.md) rather than invoking these scripts from partial configuration.
 
@@ -89,7 +91,7 @@ Incomplete groups remain in raw evidence and make the bundle ineligible for a po
 | `research/oracle-replay` | Offline N-aware replay against observed snapshots |
 | `research/gate-decision` | Paired analysis and signed decision artifact |
 | `research/gate-compiler` | Re-verifies raw real-GPU bundles and derives the only signable decision |
-| `internal/conditioncontroller` | Fail-closed driver/attestation contract for real workload state |
+| `internal/conditioncontroller`, `internal/conditiondriver` | Fail-closed attestation plus concrete cache/load conditioning for real workload state |
 | `internal/artifacts` | Append-only artifact hashing and verification |
 | `deploy/` | Helm, Gateway, observability, and Kind assets |
 | `infra/terraform/` | Review-first AWS/EKS experiment infrastructure |

@@ -17,6 +17,10 @@
     "load_regime": {"enum": ["idle", "moderate", "near-saturation"]},
     "snapshot": {"$ref": "#/$defs/snapshot"},
     "target": {"$ref": "#/$defs/endpointRef"},
+    "scored_candidates": {"type": "array", "items": {"$ref": "#/$defs/endpointScore"}},
+    "selected_p2p_source": {"$ref": "#/$defs/prefixSource"},
+    "selected_p2p_source_host": {"type": "string", "minLength": 1},
+    "selected_p2p_source_port": {"type": "integer", "minimum": 1, "maximum": 65535},
     "observed_at": {"type": "string", "format": "date-time"},
     "attributes": {"type": "object", "additionalProperties": {"type": "string"}}
   },
@@ -41,10 +45,19 @@
         "transfer_bytes": {"type": "integer", "minimum": 0}
       }
     },
+    "endpointScore": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["endpoint", "score"],
+      "properties": {
+        "endpoint": {"$ref": "#/$defs/endpointRef"},
+        "score": {"type": "number"}
+      }
+    },
     "endpointState": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["ref", "healthy", "compatible", "available_at_seconds", "queue_depth", "running_requests", "local_prefix_tokens", "observed_inflight"],
+      "required": ["ref", "healthy", "compatible", "available_at_seconds", "queue_depth", "running_requests", "local_prefix_tokens", "source_prefix_tokens", "observed_inflight"],
       "properties": {
         "ref": {"$ref": "#/$defs/endpointRef"},
         "healthy": {"type": "boolean"},
@@ -53,6 +66,7 @@
         "queue_depth": {"type": "integer", "minimum": 0},
         "running_requests": {"type": "integer", "minimum": 0},
         "local_prefix_tokens": {"type": "integer", "minimum": 0},
+        "source_prefix_tokens": {"type": "integer", "minimum": 0},
         "observed_inflight": {"type": "integer", "minimum": 0},
         "inflight_published_at": {"type": "string", "format": "date-time"},
         "p2p_sources": {"type": "array", "items": {"$ref": "#/$defs/prefixSource"}}
@@ -69,4 +83,3 @@
     }
   }
 }
-

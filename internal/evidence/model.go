@@ -60,6 +60,7 @@ type EndpointState struct {
 	QueueDepth          uint32         `json:"queue_depth"`
 	RunningRequests     uint32         `json:"running_requests"`
 	LocalPrefixTokens   uint64         `json:"local_prefix_tokens"`
+	SourcePrefixTokens  uint64         `json:"source_prefix_tokens"`
 	ObservedInflight    uint32         `json:"observed_inflight"`
 	InflightPublishedAt *time.Time     `json:"inflight_published_at,omitempty"`
 	P2PSources          []PrefixSource `json:"p2p_sources,omitempty"`
@@ -70,20 +71,29 @@ type EndpointSnapshot struct {
 	Endpoints  []EndpointState `json:"endpoints"`
 }
 
+type EndpointScore struct {
+	Endpoint EndpointRef `json:"endpoint"`
+	Score    float64     `json:"score"`
+}
+
 type PlacementEvent struct {
-	SchemaVersion string            `json:"schema_version"`
-	RunID         string            `json:"run_id"`
-	Arm           Arm               `json:"arm"`
-	GroupID       string            `json:"group_id"`
-	RequestID     string            `json:"request_id"`
-	FanoutWidth   uint32            `json:"fanout_width"`
-	ArrivalSkewMS uint32            `json:"arrival_skew_ms"`
-	EPPReplicas   uint32            `json:"epp_replicas"`
-	LoadRegime    LoadRegime        `json:"load_regime"`
-	Snapshot      EndpointSnapshot  `json:"snapshot"`
-	Target        EndpointRef       `json:"target"`
-	ObservedAt    time.Time         `json:"observed_at"`
-	Attributes    map[string]string `json:"attributes,omitempty"`
+	SchemaVersion         string            `json:"schema_version"`
+	RunID                 string            `json:"run_id"`
+	Arm                   Arm               `json:"arm"`
+	GroupID               string            `json:"group_id"`
+	RequestID             string            `json:"request_id"`
+	FanoutWidth           uint32            `json:"fanout_width"`
+	ArrivalSkewMS         uint32            `json:"arrival_skew_ms"`
+	EPPReplicas           uint32            `json:"epp_replicas"`
+	LoadRegime            LoadRegime        `json:"load_regime"`
+	Snapshot              EndpointSnapshot  `json:"snapshot"`
+	Target                EndpointRef       `json:"target"`
+	ScoredCandidates      []EndpointScore   `json:"scored_candidates,omitempty"`
+	SelectedP2PSource     *PrefixSource     `json:"selected_p2p_source,omitempty"`
+	SelectedP2PSourceHost string            `json:"selected_p2p_source_host,omitempty"`
+	SelectedP2PSourcePort uint32            `json:"selected_p2p_source_port,omitempty"`
+	ObservedAt            time.Time         `json:"observed_at"`
+	Attributes            map[string]string `json:"attributes,omitempty"`
 }
 
 type ChildResult struct {
@@ -92,6 +102,8 @@ type ChildResult struct {
 	TTFTSeconds    float64      `json:"ttft_seconds"`
 	LatencySeconds float64      `json:"latency_seconds"`
 	OutputTokens   uint64       `json:"output_tokens"`
+	PromptTokens   uint64       `json:"prompt_tokens,omitempty"`
+	CachedTokens   *uint64      `json:"cached_tokens,omitempty"`
 	Outcome        Outcome      `json:"outcome"`
 	Failure        string       `json:"failure,omitempty"`
 	DispatchedAt   *time.Time   `json:"dispatched_at,omitempty"`
@@ -123,19 +135,29 @@ type ConditionAttestation struct {
 	LoadRegime         LoadRegime             `json:"load_regime"`
 	CacheState         string                 `json:"cache_state"`
 	PrefixSourceCount  uint32                 `json:"prefix_source_count,omitempty"`
+	OwnerRotation      uint32                 `json:"owner_rotation"`
 	ControllerRevision string                 `json:"controller_revision"`
 	StateSHA256        string                 `json:"state_sha256"`
 	ObservedState      ConditionObservedState `json:"observed_state"`
 	AppliedAt          time.Time              `json:"applied_at"`
+	FinalizedAt        *time.Time             `json:"finalized_at"`
 }
 
 type ConditionObservedState struct {
-	OfferedLoadQPS          float64  `json:"offered_load_qps"`
-	AchievedLoadQPS         float64  `json:"achieved_load_qps"`
-	SaturationQPS           float64  `json:"saturation_qps"`
-	CachedEndpointIDs       []string `json:"cached_endpoint_ids"`
-	PrefixSourceEndpointIDs []string `json:"prefix_source_endpoint_ids,omitempty"`
-	MeasurementSource       string   `json:"measurement_source"`
+	OfferedLoadQPS                    float64  `json:"offered_load_qps"`
+	AchievedLoadQPS                   float64  `json:"achieved_load_qps"`
+	SaturationQPS                     float64  `json:"saturation_qps"`
+	LoadProfileSHA256                 string   `json:"load_profile_sha256"`
+	LoadProfilesSHA256                string   `json:"load_profiles_sha256"`
+	LoadCalibrationSHA256             string   `json:"load_calibration_sha256"`
+	CachedEndpointIDs                 []string `json:"cached_endpoint_ids"`
+	PrefixSourceEndpointIDs           []string `json:"prefix_source_endpoint_ids,omitempty"`
+	OwnerEndpointOrder                []string `json:"owner_endpoint_order"`
+	DrainedEndpointIDs                []string `json:"drained_endpoint_ids"`
+	DrainStableSamples                uint32   `json:"drain_stable_samples"`
+	DroppedLoadRequests               uint64   `json:"dropped_load_requests"`
+	OrdinaryTrafficMeanLatencySeconds float64  `json:"ordinary_traffic_mean_latency_seconds"`
+	MeasurementSource                 string   `json:"measurement_source"`
 }
 
 type GroupResult struct {
@@ -153,6 +175,7 @@ type GroupResult struct {
 	Failure                 string                `json:"failure,omitempty"`
 	Children                []ChildResult         `json:"children"`
 	Condition               *ConditionAttestation `json:"condition,omitempty"`
+	ConditionFailure        string                `json:"condition_failure,omitempty"`
 }
 
 type ConfidenceInterval struct {

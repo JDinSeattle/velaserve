@@ -72,8 +72,8 @@ variable "gpu_instance_types" {
   default     = ["g6e.xlarge"]
 
   validation {
-    condition     = length(var.gpu_instance_types) > 0 && length(var.gpu_instance_types) <= 4
-    error_message = "Provide one to four explicitly quota-confirmed GPU instance types."
+    condition     = length(var.gpu_instance_types) == 1 && var.gpu_instance_types[0] == "g6e.xlarge"
+    error_message = "Stage-1 requires exactly the preregistered single-GPU g6e.xlarge shape."
   }
 }
 

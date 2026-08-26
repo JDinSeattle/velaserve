@@ -9,7 +9,7 @@ import (
 	"github.com/JDinSeattle/velaserve/internal/evidence"
 )
 
-const SourcePressureSchemaVersion = "velaserve.source-pressure/v1"
+const SourcePressureSchemaVersion = "velaserve.source-pressure/v2"
 
 type Acquisition string
 
@@ -31,6 +31,8 @@ type SourcePressureObservation struct {
 	TransferBytes            *uint64               `json:"transfer_bytes,omitempty"`
 	TransferStartedAt        *time.Time            `json:"transfer_started_at,omitempty"`
 	TransferCompletedAt      *time.Time            `json:"transfer_completed_at,omitempty"`
+	PeakConcurrentPulls      *uint32               `json:"peak_concurrent_pulls_per_source,omitempty"`
+	TransferBytesPerSecond   *float64              `json:"transfer_throughput_bytes_per_second,omitempty"`
 	LastSiblingTTFTSeconds   float64               `json:"last_sibling_ttft_seconds"`
 	SourceNICBytesPerSecond  *float64              `json:"source_nic_bytes_per_second,omitempty"`
 	SourceCPUTierUtilization *float64              `json:"source_cpu_tier_utilization,omitempty"`
@@ -86,11 +88,17 @@ func ValidateSourcePressure(record SourcePressureObservation) error {
 		if record.TransferStartedAt == nil || record.TransferCompletedAt == nil {
 			return fmt.Errorf("transfer timestamps are required for p2p acquisition")
 		}
-		if record.TransferStartedAt.IsZero() || record.TransferCompletedAt.IsZero() || record.TransferCompletedAt.Before(*record.TransferStartedAt) {
+		if record.TransferStartedAt.IsZero() || record.TransferCompletedAt.IsZero() || !record.TransferCompletedAt.After(*record.TransferStartedAt) {
 			return fmt.Errorf("transfer timestamps are invalid")
 		}
+		if record.PeakConcurrentPulls == nil || *record.PeakConcurrentPulls == 0 {
+			return fmt.Errorf("peak_concurrent_pulls_per_source: positive derived measurement required for p2p acquisition")
+		}
+		if record.TransferBytesPerSecond == nil || !finiteNonNegativeSource(*record.TransferBytesPerSecond) || *record.TransferBytesPerSecond <= 0 {
+			return fmt.Errorf("transfer_throughput_bytes_per_second: positive finite derived measurement required for p2p acquisition")
+		}
 	case AcquisitionLocal, AcquisitionRecompute:
-		if record.ChosenSource != nil || record.TransferBytes != nil || record.TransferStartedAt != nil || record.TransferCompletedAt != nil {
+		if record.ChosenSource != nil || record.TransferBytes != nil || record.TransferStartedAt != nil || record.TransferCompletedAt != nil || record.PeakConcurrentPulls != nil || record.TransferBytesPerSecond != nil {
 			return fmt.Errorf("%s acquisition cannot include transfer evidence", record.Acquisition)
 		}
 	default:

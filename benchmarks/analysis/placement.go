@@ -33,6 +33,7 @@ func PlacementGateCells(groups []evidence.GroupResult, oracles []replay.OracleRe
 		oracleByGroup[key] = oracle
 	}
 	allGroupIdentities := make(map[string]struct{}, len(groups))
+	armBIdentities := make(map[string]struct{}, len(groups))
 	for index, group := range groups {
 		identity := group.RunID + "\x00" + group.GroupID
 		if _, exists := allGroupIdentities[identity]; exists {
@@ -60,6 +61,7 @@ func PlacementGateCells(groups []evidence.GroupResult, oracles []replay.OracleRe
 			return nil, fmt.Errorf("Arm-B group %q is duplicated", group.GroupID)
 		}
 		seenGroups[identity] = struct{}{}
+		armBIdentities[identity] = struct{}{}
 		oracle, exists := oracleByGroup[identity]
 		if !exists {
 			return nil, fmt.Errorf("Arm-B group %q has no oracle record", group.GroupID)
@@ -79,12 +81,12 @@ func PlacementGateCells(groups []evidence.GroupResult, oracles []replay.OracleRe
 	if armBGroups == 0 {
 		return nil, nil
 	}
-	if len(allGroupIdentities) != len(oracleByGroup) {
-		return nil, fmt.Errorf("oracle/group identity counts differ: %d and %d", len(oracleByGroup), len(allGroupIdentities))
+	if len(armBIdentities) != len(oracleByGroup) {
+		return nil, fmt.Errorf("oracle/Arm-B group identity counts differ: %d and %d", len(oracleByGroup), len(armBIdentities))
 	}
 	for identity := range oracleByGroup {
-		if _, exists := allGroupIdentities[identity]; !exists {
-			return nil, fmt.Errorf("oracle record does not join to any group")
+		if _, exists := armBIdentities[identity]; !exists {
+			return nil, fmt.Errorf("oracle record does not join to an Arm-B group")
 		}
 	}
 

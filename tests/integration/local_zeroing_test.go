@@ -54,6 +54,9 @@ func TestLocalZeroingProducesVerifiedSimulationOnlyBundle(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("zeroprobe.Analyze() error = %v", err)
 	}
+	if err := zeroprobe.SealVerification(root); err != nil {
+		t.Fatalf("zeroprobe.SealVerification() error = %v", err)
+	}
 	if err := zeroprobe.Verify(root); err != nil {
 		t.Fatalf("zeroprobe.Verify() error = %v", err)
 	}

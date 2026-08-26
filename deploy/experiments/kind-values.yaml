@@ -1,6 +1,8 @@
 evidenceScope: simulation_only
 eppReplicas: 1
 activeActiveObservation: false
+model:
+  minCachedTokenDelta: 128
 images:
   velaserve:
     repository: docker.io/jdinseattle/velaserve

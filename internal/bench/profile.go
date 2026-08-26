@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"reflect"
 	"sort"
 	"strings"
 	"time"
@@ -22,35 +23,103 @@ const (
 )
 
 type Profile struct {
-	SchemaVersion  string                `yaml:"schema_version"`
-	Seed           uint64                `yaml:"seed"`
-	RunIDPrefix    string                `yaml:"run_id_prefix"`
-	Model          string                `yaml:"model"`
-	MaxWidth       uint32                `yaml:"max_width"`
-	TimeoutMS      uint32                `yaml:"timeout_ms"`
-	Repetitions    uint32                `yaml:"repetitions"`
-	Widths         []uint32              `yaml:"widths"`
-	ArrivalSkewsMS []uint32              `yaml:"arrival_skews_ms"`
-	Arms           []evidence.Arm        `yaml:"arms"`
-	Prefixes       []PrefixProfile       `yaml:"prefixes"`
-	Outputs        []OutputProfile       `yaml:"outputs"`
-	LoadRegimes    []evidence.LoadRegime `yaml:"load_regimes"`
-	CacheStates    []string              `yaml:"cache_states"`
-	Transports     []string              `yaml:"transports"`
-	EPPReplicas    []uint32              `yaml:"epp_replicas"`
-	Suffixes       []string              `yaml:"suffixes"`
+	SchemaVersion      string                `yaml:"schema_version" json:"schema_version"`
+	Seed               uint64                `yaml:"seed" json:"seed"`
+	RunIDPrefix        string                `yaml:"run_id_prefix" json:"run_id_prefix"`
+	Model              string                `yaml:"model" json:"model"`
+	MaxWidth           uint32                `yaml:"max_width" json:"max_width"`
+	TimeoutMS          uint32                `yaml:"timeout_ms" json:"timeout_ms"`
+	Repetitions        uint32                `yaml:"repetitions" json:"repetitions"`
+	Widths             []uint32              `yaml:"widths" json:"widths"`
+	ArrivalSkewsMS     []uint32              `yaml:"arrival_skews_ms" json:"arrival_skews_ms"`
+	Arms               []evidence.Arm        `yaml:"arms" json:"arms"`
+	Prefixes           []PrefixProfile       `yaml:"prefixes" json:"prefixes"`
+	Outputs            []OutputProfile       `yaml:"outputs" json:"outputs"`
+	LoadRegimes        []evidence.LoadRegime `yaml:"load_regimes" json:"load_regimes"`
+	CacheStates        []string              `yaml:"cache_states" json:"cache_states"`
+	PrefixSourceCounts []uint32              `yaml:"prefix_source_counts,omitempty" json:"prefix_source_counts,omitempty"`
+	Transports         []string              `yaml:"transports" json:"transports"`
+	EPPReplicas        []uint32              `yaml:"epp_replicas" json:"epp_replicas"`
+	Suffixes           []string              `yaml:"suffixes" json:"suffixes"`
 }
 
 type PrefixProfile struct {
-	ID              string `yaml:"id"`
-	EstimatedTokens uint64 `yaml:"estimated_tokens"`
-	RepeatText      string `yaml:"repeat_text"`
-	RepeatCount     uint32 `yaml:"repeat_count"`
+	ID              string `yaml:"id" json:"id"`
+	EstimatedTokens uint64 `yaml:"estimated_tokens" json:"estimated_tokens"`
+	RepeatText      string `yaml:"repeat_text" json:"repeat_text"`
+	RepeatCount     uint32 `yaml:"repeat_count" json:"repeat_count"`
 }
 
 type OutputProfile struct {
-	ID        string `yaml:"id"`
-	MaxTokens uint32 `yaml:"max_tokens"`
+	ID        string `yaml:"id" json:"id"`
+	MaxTokens uint32 `yaml:"max_tokens" json:"max_tokens"`
+}
+
+// ValidateAWSZ0Profile binds real-GPU evidence to the complete preregistered
+// matrix. The model, transport, EPP replica count, and active arm are bound by
+// the deployment preflight; every other factor is fixed here independently of
+// the profile carried by an artifact bundle.
+func ValidateAWSZ0Profile(profile Profile, phase string) error {
+	if err := validateProfile(profile); err != nil {
+		return err
+	}
+	if profile.Seed != 20260825 || profile.RunIDPrefix != "aws-z0" || profile.MaxWidth != 16 || profile.TimeoutMS != 180000 || profile.Repetitions != 3 {
+		return fmt.Errorf("AWS Z0 seed, run prefix, width, timeout, and three repetitions are frozen")
+	}
+	if !reflect.DeepEqual(profile.Widths, []uint32{2, 4, 8, 16}) || !reflect.DeepEqual(profile.ArrivalSkewsMS, []uint32{0, 1, 5, 20}) {
+		return fmt.Errorf("AWS Z0 widths and arrival skews do not match the frozen matrix")
+	}
+	wantPrefixIDs := []string{"below-zeroing-crossover", "near-zeroing-crossover", "above-zeroing-crossover"}
+	wantOutputs := []OutputProfile{{ID: "short", MaxTokens: 32}, {ID: "moderate", MaxTokens: 128}}
+	wantLoads := []evidence.LoadRegime{evidence.LoadIdle, evidence.LoadModerate, evidence.LoadNearSaturation}
+	if len(profile.Prefixes) != len(wantPrefixIDs) {
+		return fmt.Errorf("AWS Z0 requires three tokenizer-calibrated prefix regimes")
+	}
+	for index, prefix := range profile.Prefixes {
+		if prefix.ID != wantPrefixIDs[index] || prefix.RepeatText != "shared zeroing context token " || prefix.EstimatedTokens == 0 || prefix.RepeatCount == 0 {
+			return fmt.Errorf("AWS Z0 prefix regime %d is not a generated tokenizer calibration", index+1)
+		}
+		if index > 0 && prefix.EstimatedTokens <= profile.Prefixes[index-1].EstimatedTokens {
+			return fmt.Errorf("AWS Z0 calibrated prefix token counts must increase")
+		}
+	}
+	if !reflect.DeepEqual(profile.Outputs, wantOutputs) || !reflect.DeepEqual(profile.LoadRegimes, wantLoads) {
+		return fmt.Errorf("AWS Z0 output and load factors do not match the frozen matrix")
+	}
+	wantCaches := []string{"warm-owner", "distributed-warm", "cold"}
+	switch phase {
+	case "z0-a", "z0-b":
+	case "z0-c":
+		wantCaches = []string{"distributed-warm"}
+	default:
+		return fmt.Errorf("AWS Z0 phase %q is unsupported", phase)
+	}
+	if !reflect.DeepEqual(profile.CacheStates, wantCaches) {
+		return fmt.Errorf("AWS %s cache states do not match the frozen matrix", phase)
+	}
+	if phase == "z0-c" {
+		if !reflect.DeepEqual(profile.PrefixSourceCounts, []uint32{1, 2, 4}) {
+			return fmt.Errorf("AWS Z0-C requires the frozen interleaved prefix-source counts [1 2 4]")
+		}
+	} else if len(profile.PrefixSourceCounts) != 0 {
+		return fmt.Errorf("AWS %s cannot include prefix-source-count conditions", phase)
+	}
+	if len(profile.Transports) != 1 || (profile.Transports[0] != "tcp" && profile.Transports[0] != "efa") || len(profile.EPPReplicas) != 1 || (profile.EPPReplicas[0] != 1 && profile.EPPReplicas[0] != 2) {
+		return fmt.Errorf("AWS Z0 requires one bound transport and one bound EPP replica count")
+	}
+	if phase == "z0-b" || phase == "z0-c" {
+		if !reflect.DeepEqual(profile.Arms, []evidence.Arm{evidence.ArmLoadAwareP2P}) {
+			return fmt.Errorf("AWS %s gate evidence must contain only Arm B", phase)
+		}
+	}
+	wantSuffixes := make([]string, 16)
+	for index := range wantSuffixes {
+		wantSuffixes[index] = fmt.Sprintf("\nCandidate %02d: answer independently.", index+1)
+	}
+	if !reflect.DeepEqual(profile.Suffixes, wantSuffixes) {
+		return fmt.Errorf("AWS Z0 suffix corpus does not match the frozen matrix")
+	}
+	return nil
 }
 
 func LoadProfile(path string) (Profile, error) {
@@ -99,11 +168,18 @@ func ExpandProfile(profile Profile) ([]GroupRequest, error) {
 	groupCount := uint64(profile.Repetitions) * uint64(len(profile.Prefixes)) * uint64(len(profile.Outputs)) *
 		uint64(len(profile.ArrivalSkewsMS)) * uint64(len(profile.LoadRegimes)) * uint64(len(profile.CacheStates)) *
 		uint64(len(profile.Transports)) * uint64(len(profile.EPPReplicas)) * uint64(len(profile.Widths)) * uint64(len(profile.Arms))
+	if len(profile.PrefixSourceCounts) > 0 {
+		groupCount *= uint64(len(profile.PrefixSourceCounts))
+	}
 	if groupCount > 10_000_000 {
 		return nil, fmt.Errorf("profile expands to %d groups, exceeding safety limit", groupCount)
 	}
 	requests := make([]GroupRequest, 0, int(groupCount))
 	cellIndex := uint64(0)
+	sourceCounts := profile.PrefixSourceCounts
+	if len(sourceCounts) == 0 {
+		sourceCounts = []uint32{0}
+	}
 	for repetition := uint32(1); repetition <= profile.Repetitions; repetition++ {
 		for _, prefix := range profile.Prefixes {
 			renderedPrefix := strings.Repeat(prefix.RepeatText, int(prefix.RepeatCount))
@@ -115,31 +191,37 @@ func ExpandProfile(profile Profile) ([]GroupRequest, error) {
 								for _, replicas := range profile.EPPReplicas {
 									for _, width := range profile.Widths {
 										cellIndex++
-										arms := orderedArms(profile.Seed, cellIndex, profile.Arms)
-										for _, arm := range arms {
-											requests = append(requests, GroupRequest{
-												RunID:        profile.RunIDPrefix,
-												Arm:          arm,
-												Model:        profile.Model,
-												CommonPrefix: renderedPrefix,
-												Suffixes:     append([]string(nil), profile.Suffixes[:width]...),
-												MaxTokens:    output.MaxTokens,
-												MaxWidth:     profile.MaxWidth,
-												ArrivalSkew:  time.Duration(skew) * time.Millisecond,
-												Timeout:      time.Duration(profile.TimeoutMS) * time.Millisecond,
-												Cell: evidence.BenchmarkCell{
-													Repetition:    repetition,
-													PrefixRegime:  prefix.ID,
-													PrefixTokens:  prefix.EstimatedTokens,
-													OutputRegime:  output.ID,
-													MaxTokens:     output.MaxTokens,
-													ArrivalSkewMS: skew,
-													LoadRegime:    load,
-													CacheState:    cacheState,
-													Transport:     transport,
-													EPPReplicas:   replicas,
-												},
-											})
+										ownerRotation := uint32(cellIndex - 1)
+										for _, sourceCount := range orderedSourceCounts(profile.Seed, cellIndex, sourceCounts) {
+											arms := orderedArms(profile.Seed, cellIndex+uint64(sourceCount), profile.Arms)
+											for _, arm := range arms {
+												requests = append(requests, GroupRequest{
+													RunID:             profile.RunIDPrefix,
+													Arm:               arm,
+													PrefixSourceCount: sourceCount,
+													OwnerRotation:     ownerRotation,
+													Model:             profile.Model,
+													CommonPrefix:      renderedPrefix,
+													WarmupContent:     renderedPrefix + CalibrationWarmupSuffix,
+													Suffixes:          append([]string(nil), profile.Suffixes[:width]...),
+													MaxTokens:         output.MaxTokens,
+													MaxWidth:          profile.MaxWidth,
+													ArrivalSkew:       time.Duration(skew) * time.Millisecond,
+													Timeout:           time.Duration(profile.TimeoutMS) * time.Millisecond,
+													Cell: evidence.BenchmarkCell{
+														Repetition:    repetition,
+														PrefixRegime:  prefix.ID,
+														PrefixTokens:  prefix.EstimatedTokens,
+														OutputRegime:  output.ID,
+														MaxTokens:     output.MaxTokens,
+														ArrivalSkewMS: skew,
+														LoadRegime:    load,
+														CacheState:    cacheState,
+														Transport:     transport,
+														EPPReplicas:   replicas,
+													},
+												})
+											}
 										}
 									}
 								}
@@ -229,6 +311,16 @@ func validateProfile(profile Profile) error {
 			return fmt.Errorf("cache_states[%d] has unsupported value %q", index, state)
 		}
 	}
+	seenSourceCounts := make(map[uint32]struct{}, len(profile.PrefixSourceCounts))
+	for index, count := range profile.PrefixSourceCounts {
+		if count != 1 && count != 2 && count != 4 {
+			return fmt.Errorf("prefix_source_counts[%d]: got %d, want 1, 2, or 4", index, count)
+		}
+		if _, exists := seenSourceCounts[count]; exists {
+			return fmt.Errorf("prefix_source_counts[%d] repeats %d", index, count)
+		}
+		seenSourceCounts[count] = struct{}{}
+	}
 	for index, transport := range profile.Transports {
 		if transport != "tcp" && !strings.HasSuffix(transport, "-verified") {
 			return fmt.Errorf("transports[%d] must be tcp or explicitly end in -verified", index)
@@ -267,6 +359,23 @@ func orderedArms(seed, cell uint64, arms []evidence.Arm) []evidence.Arm {
 		return armRank(seed, cell, ordered[left]) < armRank(seed, cell, ordered[right])
 	})
 	return ordered
+}
+
+func orderedSourceCounts(seed, cell uint64, counts []uint32) []uint32 {
+	ordered := append([]uint32(nil), counts...)
+	sort.SliceStable(ordered, func(left, right int) bool {
+		return sourceCountRank(seed, cell, ordered[left]) < sourceCountRank(seed, cell, ordered[right])
+	})
+	return ordered
+}
+
+func sourceCountRank(seed, cell uint64, count uint32) uint64 {
+	var numbers [20]byte
+	binary.BigEndian.PutUint64(numbers[:8], seed)
+	binary.BigEndian.PutUint64(numbers[8:16], cell)
+	binary.BigEndian.PutUint32(numbers[16:], count)
+	digest := sha256.Sum256(numbers[:])
+	return binary.BigEndian.Uint64(digest[:8])
 }
 
 func armRank(seed, cell uint64, arm evidence.Arm) uint64 {

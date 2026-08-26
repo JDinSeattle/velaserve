@@ -21,8 +21,6 @@ func main() {
 		err = keygen(os.Args[2:])
 	case "compile":
 		err = compile(os.Args[2:])
-	case "sign":
-		err = sign(os.Args[2:])
 	case "verify":
 		err = verify(os.Args[2:])
 	default:
@@ -50,6 +48,7 @@ func compile(args []string) error {
 	preregistrationPath := flags.String("preregistration", "", "frozen preregistration file")
 	outputDirectory := flags.String("output-dir", "", "new compiled gate directory")
 	decisionID := flags.String("id", "", "opaque decision ID")
+	privatePath := flags.String("private", "", "Ed25519 private key; compilation always emits a signed decision")
 	decidedAtText := flags.String("decided-at", "", "RFC3339 decision timestamp; defaults to current UTC time")
 	if err := flags.Parse(args); err != nil {
 		return err
@@ -74,22 +73,9 @@ func compile(args []string) error {
 		OutputDirectory:     *outputDirectory,
 		DecisionID:          *decisionID,
 		DecidedAt:           decidedAt,
+		PrivateKeyPath:      *privatePath,
 	})
 	return err
-}
-
-func sign(args []string) error {
-	flags := flag.NewFlagSet("sign", flag.ContinueOnError)
-	decisionPath := flags.String("decision", "", "unsigned decision JSON")
-	privatePath := flags.String("private", "", "Ed25519 private key")
-	outputPath := flags.String("output", "", "signed decision JSON output")
-	evidencePath := flags.String("evidence", "", "bound gate evidence JSONL")
-	preregistrationPath := flags.String("preregistration", "", "bound frozen preregistration")
-	ledgerPath := flags.String("ledger", "", "bound aggregate artifact ledger")
-	if err := flags.Parse(args); err != nil {
-		return err
-	}
-	return gate.SignDecisionFile(*decisionPath, *privatePath, *outputPath, gate.DecisionBindings{EvidencePath: *evidencePath, PreregistrationPath: *preregistrationPath, LedgerPath: *ledgerPath})
 }
 
 func verify(args []string) error {
@@ -106,6 +92,6 @@ func verify(args []string) error {
 }
 
 func usage() {
-	fmt.Fprintln(os.Stderr, "usage: velaserve-gate <keygen|compile|sign|verify> [flags]")
+	fmt.Fprintln(os.Stderr, "usage: velaserve-gate <keygen|compile|verify> [flags]")
 	os.Exit(2)
 }

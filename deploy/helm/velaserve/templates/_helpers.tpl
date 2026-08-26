@@ -26,4 +26,7 @@ helm.sh/chart: {{ printf "%s-%s" .Chart.Name .Chart.Version | quote }}
 {{- if and (eq .Values.evidenceScope "real_gpu") (not (regexMatch "^.+@sha256:[a-f0-9]{64}$" .Values.images.upstreamEPP.tag)) -}}
 {{- fail "real_gpu evidence requires a digest-addressed upstream EPP image in images.upstreamEPP.tag" -}}
 {{- end -}}
+{{- if and (eq .Values.evidenceScope "real_gpu") (not .Values.clockProbe.enabled) -}}
+{{- fail "real_gpu evidence requires the node-local clock probe" -}}
+{{- end -}}
 {{- end -}}

@@ -228,6 +228,7 @@ func (fleet *Fleet) recordEPP(observedAt time.Time, requestID, groupID string, t
 		ObservedAt:    observedAt,
 		Snapshot:      snapshot,
 		Target:        target,
+		TargetHost:    target.ID,
 	})
 }
 

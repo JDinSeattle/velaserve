@@ -10,27 +10,18 @@ spec:
       interval: 30s
       rules:
         - record: fanoutbench:group_makespan_seconds:p95_5m
-          expr: histogram_quantile(0.95, sum by (le) (rate(fanoutbench_group_makespan_seconds_bucket[5m])))
+          expr: histogram_quantile(0.95, sum by (le, arm, width, load, prefix, transport) (fanoutbench_group_makespan_seconds_bucket))
         - record: fanoutbench:slowest_child_ttft_seconds:p99_5m
-          expr: histogram_quantile(0.99, sum by (le) (rate(fanoutbench_slowest_child_ttft_seconds_bucket[5m])))
+          expr: histogram_quantile(0.99, sum by (le, arm, width, load, prefix, transport) (fanoutbench_slowest_child_ttft_seconds_bucket))
         - record: fanoutbench:group_failure_ratio:5m
-          expr: sum(rate(fanoutbench_groups_total{outcome!="success"}[5m])) / clamp_min(sum(rate(fanoutbench_groups_total[5m])), 1)
-        - record: velaserve:oracle_regret_seconds:p95_5m
-          expr: histogram_quantile(0.95, sum by (le) (rate(velaserve_zeroing_oracle_regret_seconds_bucket[5m])))
+          expr: sum by (arm, width, load, prefix, transport) (fanoutbench_groups_total{outcome!="success"}) / clamp_min(sum by (arm, width, load, prefix, transport) (fanoutbench_groups_total), 1)
     - name: velaserve.stage1.alerts
       rules:
-        - alert: VelaServeArtifactIncomplete
-          expr: velaserve_zeroing_artifact_complete == 0
+        - alert: VelaServeRunIncomplete
+          expr: velaserve_zeroing_run_complete == 0
           for: 5m
           labels:
             severity: warning
           annotations:
-            summary: VelaServe evidence bundle is incomplete
-            description: Verify the artifact ledger and unmatched recorder inputs before making a gate decision.
-        - alert: VelaServeRecorderHasUnmatchedInputs
-          expr: increase(velaserve_zeroing_unmatched_records_total[10m]) > 0
-          labels:
-            severity: warning
-          annotations:
-            summary: VelaServe recorder could not correlate one or more inputs
-            description: Unknown lines are retained in unmatched.jsonl and invalidate evidence completeness.
+            summary: VelaServe raw benchmark run is incomplete
+            description: Inspect group outcomes before attempting artifact ingestion and verification.

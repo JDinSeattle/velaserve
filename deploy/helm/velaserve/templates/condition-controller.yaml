@@ -33,6 +33,13 @@ spec:
               value: {{ required "conditionController.revision is required when enabled" .Values.conditionController.revision | quote }}
             - name: VELASERVE_CONDITION_LISTEN
               value: {{ printf ":%d" (int .Values.conditionController.port) | quote }}
+            - name: VELASERVE_CONDITION_APPLY_TIMEOUT_SECONDS
+              value: {{ required "conditionController.applyTimeoutSeconds is required when enabled" .Values.conditionController.applyTimeoutSeconds | quote }}
+            - name: VELASERVE_CONDITION_CONTROL_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ required "conditionControlSecret.name is required when the controller is enabled" .Values.conditionControlSecret.name | quote }}
+                  key: {{ required "conditionControlSecret.key is required when the controller is enabled" .Values.conditionControlSecret.key | quote }}
           ports:
             - name: http
               containerPort: {{ .Values.conditionController.port }}

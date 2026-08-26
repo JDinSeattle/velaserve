@@ -7,6 +7,7 @@ import (
 	"sort"
 
 	"github.com/JDinSeattle/velaserve/internal/evidence"
+	"github.com/JDinSeattle/velaserve/internal/fanout/model"
 	"github.com/JDinSeattle/velaserve/internal/fanout/planner"
 )
 
@@ -16,9 +17,10 @@ type TargetCount struct {
 }
 
 type WidthEvaluation struct {
-	K                 uint32        `json:"k"`
-	PredictedMakespan float64       `json:"predicted_makespan_seconds"`
-	TargetCounts      []TargetCount `json:"target_counts"`
+	K                 uint32                   `json:"k"`
+	PredictedMakespan float64                  `json:"predicted_makespan_seconds"`
+	TargetCounts      []TargetCount            `json:"target_counts"`
+	Slots             []planner.SlotAssignment `json:"slots"`
 }
 
 type OracleResult struct {
@@ -31,8 +33,21 @@ type OracleResult struct {
 }
 
 func EvaluateAllWidths(in Input) (OracleResult, error) {
+	baseline, err := ReplayArmB(in)
+	if err != nil {
+		return OracleResult{}, err
+	}
+	return EvaluateAllWidthsAgainst(in, baseline)
+}
+
+// EvaluateAllWidthsAgainst compares the N-aware oracle with a caller-provided
+// Arm-B target vector that was scored by the same frozen cost model.
+func EvaluateAllWidthsAgainst(in Input, baseline ReplayResult) (OracleResult, error) {
 	if err := validateReplayInput(in); err != nil {
 		return OracleResult{}, err
+	}
+	if baseline.Arm != evidence.ArmLoadAwareP2P || baseline.Width != in.Width || len(baseline.Slots) != int(in.Width) || invalidNonNegative(baseline.PredictedMakespan) {
+		return OracleResult{}, fmt.Errorf("observed Arm-B baseline is incomplete or incompatible")
 	}
 	eligible := make([]evidence.EndpointState, 0, len(in.Snapshot.Endpoints))
 	for _, endpoint := range in.Snapshot.Endpoints {
@@ -43,10 +58,6 @@ func EvaluateAllWidths(in Input) (OracleResult, error) {
 	sort.Slice(eligible, func(i, j int) bool { return refLess(eligible[i].Ref, eligible[j].Ref) })
 	if len(eligible) > 16 {
 		return OracleResult{}, fmt.Errorf("oracle supports at most 16 eligible endpoints, got %d", len(eligible))
-	}
-	baseline, err := ReplayArmB(in)
-	if err != nil {
-		return OracleResult{}, err
 	}
 	maxK := len(eligible)
 	if int(in.Width) < maxK {
@@ -95,7 +106,11 @@ func EvaluateAllWidths(in Input) (OracleResult, error) {
 }
 
 func evaluateAllocation(in Input, endpoints []evidence.EndpointState, counts []uint32) (WidthEvaluation, error) {
-	result := WidthEvaluation{K: uint32(len(endpoints)), TargetCounts: make([]TargetCount, len(endpoints))}
+	result := WidthEvaluation{K: uint32(len(endpoints)), TargetCounts: make([]TargetCount, len(endpoints)), Slots: make([]planner.SlotAssignment, 0, in.Width)}
+	remaining := append([]uint32(nil), counts...)
+	nextAvailable := make([]float64, len(endpoints))
+	prefixReady := make([]float64, len(endpoints))
+	acquisitions := make([]model.AcquisitionClass, len(endpoints))
 	for index, endpoint := range endpoints {
 		prefixPlan, err := planner.Plan(context.Background(), planner.Input{
 			Width:        1,
@@ -110,12 +125,37 @@ func evaluateAllocation(in Input, endpoints []evidence.EndpointState, counts []u
 			return WidthEvaluation{}, err
 		}
 		first := prefixPlan.Slots[0]
-		start := math.Max(endpoint.AvailableAtSeconds, first.PrefixReadyAt)
-		finish := start + float64(counts[index])*in.Calibration.ServiceSeconds
-		if finish > result.PredictedMakespan {
-			result.PredictedMakespan = finish
-		}
+		nextAvailable[index] = endpoint.AvailableAtSeconds
+		prefixReady[index] = first.PrefixReadyAt
+		acquisitions[index] = first.Acquisition
 		result.TargetCounts[index] = TargetCount{Target: endpoint.Ref, Count: counts[index]}
+	}
+	for slotID := uint32(0); slotID < in.Width; slotID++ {
+		arrival := arrivalAt(in, slotID)
+		bestIndex := -1
+		bestFinish := math.Inf(1)
+		for index, endpoint := range endpoints {
+			if remaining[index] == 0 {
+				continue
+			}
+			finish := math.Max(arrival, math.Max(nextAvailable[index], prefixReady[index])) + in.Calibration.ServiceSeconds
+			if finish < bestFinish-1e-12 || (math.Abs(finish-bestFinish) <= 1e-12 && (bestIndex < 0 || refLess(endpoint.Ref, endpoints[bestIndex].Ref))) {
+				bestIndex = index
+				bestFinish = finish
+			}
+		}
+		if bestIndex < 0 {
+			return WidthEvaluation{}, fmt.Errorf("allocation has fewer target slots than width %d", in.Width)
+		}
+		remaining[bestIndex]--
+		nextAvailable[bestIndex] = bestFinish
+		result.Slots = append(result.Slots, planner.SlotAssignment{
+			SlotID: slotID, Target: endpoints[bestIndex].Ref, Acquisition: acquisitions[bestIndex],
+			PrefixReadyAt: prefixReady[bestIndex], PredictedFinish: bestFinish,
+		})
+		if bestFinish > result.PredictedMakespan {
+			result.PredictedMakespan = bestFinish
+		}
 	}
 	return result, nil
 }

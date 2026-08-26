@@ -1,6 +1,7 @@
 package gate
 
 import (
+	"crypto/ed25519"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -73,8 +74,17 @@ func TestGateFileWorkflowGeneratesSignsAndVerifiesDecision(t *testing.T) {
 		t.Fatalf("decision branch = %q, want placement", decision.Branch)
 	}
 	bindings := DecisionBindings{EvidencePath: evidencePath, PreregistrationPath: preregistrationPath, LedgerPath: ledgerPath}
-	if err := SignDecisionFile(decisionPath, privatePath, signedPath, bindings); err != nil {
-		t.Fatalf("SignDecisionFile() error = %v", err)
+	privateBytes, err := readBase64Key(privatePath, 64)
+	if err != nil {
+		t.Fatal(err)
+	}
+	signed, err := Sign(decision, ed25519.PrivateKey(privateBytes))
+	if err != nil {
+		t.Fatal(err)
+	}
+	signedBytes, _ := json.MarshalIndent(signed, "", "  ")
+	if err := os.WriteFile(signedPath, append(signedBytes, '\n'), 0o600); err != nil {
+		t.Fatal(err)
 	}
 	if err := VerifyDecisionFile(signedPath, publicPath, bindings); err != nil {
 		t.Fatalf("VerifyDecisionFile() error = %v", err)

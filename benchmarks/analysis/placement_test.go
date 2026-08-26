@@ -3,6 +3,7 @@ package analysis
 import (
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/JDinSeattle/velaserve/internal/evidence"
 	replay "github.com/JDinSeattle/velaserve/research/oracle-replay"
@@ -50,10 +51,23 @@ func TestPlacementGateCellsOmitsUndersampledCell(t *testing.T) {
 	}
 }
 
+func TestPlacementGateCellsAllowsNonArmBGroupsWithoutOracleRecords(t *testing.T) {
+	armB := placementGroup("arm-b", 2, 1)
+	armA := placementGroup("arm-a", 2, 1)
+	armA.Arm = evidence.ArmAffinityP2P
+	oracle := replay.OracleRecord{RunID: "run", GroupID: armB.GroupID, FanoutWidth: 2, ArmB: replay.ReplayResult{Width: 2, PredictedMakespan: 1}, Oracle: replay.OracleResult{Width: 2, BestMakespan: 0.5}}
+	if _, err := PlacementGateCells([]evidence.GroupResult{armA, armB}, []replay.OracleRecord{oracle}, 1, 100, 0.95); err != nil {
+		t.Fatalf("PlacementGateCells() rejected unrelated Arm-A group: %v", err)
+	}
+}
+
 func placementGroup(groupID string, width, repetition uint32) evidence.GroupResult {
 	children := make([]evidence.ChildResult, width)
+	dispatched := time.Date(2026, 8, 26, 0, 0, int(repetition), 0, time.UTC)
+	firstToken := dispatched.Add(100 * time.Millisecond)
+	completed := dispatched.Add(time.Second)
 	for index := range children {
-		children[index] = evidence.ChildResult{RequestID: fmt.Sprintf("%s-%d", groupID, index), TTFTSeconds: 0.1, LatencySeconds: 1, Outcome: evidence.OutcomeSuccess}
+		children[index] = evidence.ChildResult{RequestID: fmt.Sprintf("%s-%d", groupID, index), TTFTSeconds: 0.1, LatencySeconds: 1, Outcome: evidence.OutcomeSuccess, DispatchedAt: &dispatched, FirstTokenAt: &firstToken, CompletedAt: &completed}
 	}
 	return evidence.GroupResult{
 		SchemaVersion:           evidence.SchemaVersion,

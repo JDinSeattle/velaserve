@@ -1,5 +1,6 @@
 {
   "annotations": {"list": []},
+  "description": "Optional post-import view over immutable metrics.prom, analysis-metrics.prom, and verification-metrics.prom snapshots. Queries use cumulative run values, never live rates.",
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
@@ -8,11 +9,47 @@
   "panels": [
     {
       "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "fieldConfig": {"defaults": {"unit": "ops"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 8, "x": 0, "y": 8},
+      "id": 4,
+      "targets": [{"expr": "sum by (arm, width, target) (velaserve_placement_target_total)", "legendFormat": "{{arm}} N={{width}} {{target}}", "refId": "A"}],
+      "title": "Placement vectors",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "fieldConfig": {"defaults": {"unit": "s"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 8, "x": 8, "y": 8},
+      "id": 5,
+      "targets": [{"expr": "sum by (width, load, prefix, transport) (velaserve_oracle_regret_seconds_sum) / clamp_min(sum by (width, load, prefix, transport) (velaserve_oracle_regret_seconds_count), 1)", "legendFormat": "N={{width}} {{load}} {{prefix}}", "refId": "A"}],
+      "title": "Oracle regret",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "fieldConfig": {"defaults": {"unit": "s"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 8, "x": 16, "y": 8},
+      "id": 6,
+      "targets": [{"expr": "histogram_quantile(0.95, sum by (le, arm, width) (velaserve_dispatch_to_epp_observation_seconds_bucket))", "legendFormat": "{{arm}} N={{width}}", "refId": "A"}],
+      "title": "Dispatch-to-EPP observation delay",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "fieldConfig": {"defaults": {"unit": "s"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 8, "x": 0, "y": 16},
+      "id": 7,
+      "targets": [{"expr": "histogram_quantile(0.95, sum by (le, load, transport) (velaserve_ordinary_traffic_latency_seconds_bucket))", "legendFormat": "{{load}} {{transport}}", "refId": "A"}],
+      "title": "Ordinary-traffic latency",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
       "fieldConfig": {"defaults": {"unit": "s"}, "overrides": []},
       "gridPos": {"h": 8, "w": 8, "x": 0, "y": 0},
       "id": 1,
       "options": {"legend": {"displayMode": "list", "placement": "bottom"}},
-      "targets": [{"expr": "histogram_quantile(0.95, sum by (le) (rate(fanoutbench_group_makespan_seconds_bucket[$__rate_interval])))", "legendFormat": "p95", "refId": "A"}],
+      "targets": [{"expr": "histogram_quantile(0.95, sum by (le) (fanoutbench_group_makespan_seconds_bucket))", "legendFormat": "p95", "refId": "A"}],
       "title": "Group makespan",
       "type": "timeseries"
     },
@@ -21,7 +58,7 @@
       "fieldConfig": {"defaults": {"unit": "s"}, "overrides": []},
       "gridPos": {"h": 8, "w": 8, "x": 8, "y": 0},
       "id": 2,
-      "targets": [{"expr": "histogram_quantile(0.99, sum by (le) (rate(fanoutbench_slowest_child_ttft_seconds_bucket[$__rate_interval])))", "legendFormat": "p99", "refId": "A"}],
+      "targets": [{"expr": "histogram_quantile(0.99, sum by (le) (fanoutbench_slowest_child_ttft_seconds_bucket))", "legendFormat": "p99", "refId": "A"}],
       "title": "Slowest-child TTFT",
       "type": "timeseries"
     },
@@ -30,44 +67,8 @@
       "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
       "gridPos": {"h": 8, "w": 8, "x": 16, "y": 0},
       "id": 3,
-      "targets": [{"expr": "rate(fanoutbench_recomputed_prefix_tokens_sum[$__rate_interval]) / clamp_min(rate(fanoutbench_recomputed_prefix_tokens_count[$__rate_interval]), 1)", "legendFormat": "tokens/group", "refId": "A"}],
+      "targets": [{"expr": "fanoutbench_recomputed_prefix_tokens_sum / clamp_min(fanoutbench_recomputed_prefix_tokens_count, 1)", "legendFormat": "tokens/group", "refId": "A"}],
       "title": "Recomputed prefix tokens",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
-      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
-      "gridPos": {"h": 8, "w": 8, "x": 0, "y": 8},
-      "id": 4,
-      "targets": [{"expr": "sum by (pod) (vllm:num_requests_running)", "legendFormat": "{{pod}}", "refId": "A"}],
-      "title": "Placement vector proxy (bounded pod set)",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
-      "fieldConfig": {"defaults": {"unit": "s"}, "overrides": []},
-      "gridPos": {"h": 8, "w": 8, "x": 8, "y": 8},
-      "id": 5,
-      "targets": [{"expr": "histogram_quantile(0.95, sum by (le) (rate(velaserve_zeroing_oracle_regret_seconds_bucket[$__rate_interval])))", "legendFormat": "p95 regret", "refId": "A"}],
-      "title": "Offline oracle regret",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
-      "fieldConfig": {"defaults": {"unit": "s"}, "overrides": []},
-      "gridPos": {"h": 8, "w": 8, "x": 16, "y": 8},
-      "id": 6,
-      "targets": [{"expr": "histogram_quantile(0.99, sum by (le) (rate(velaserve_zeroing_plan_preview_seconds_bucket[$__rate_interval])))", "legendFormat": "p99", "refId": "A"}],
-      "title": "Scheduling preview overhead",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
-      "fieldConfig": {"defaults": {"unit": "s"}, "overrides": []},
-      "gridPos": {"h": 8, "w": 8, "x": 0, "y": 16},
-      "id": 7,
-      "targets": [{"expr": "histogram_quantile(0.99, sum by (le) (rate(vllm:e2e_request_latency_seconds_bucket[$__rate_interval])))", "legendFormat": "ordinary p99", "refId": "A"}],
-      "title": "Ordinary-traffic latency",
       "type": "timeseries"
     },
     {
@@ -75,7 +76,7 @@
       "fieldConfig": {"defaults": {"unit": "ops"}, "overrides": []},
       "gridPos": {"h": 8, "w": 8, "x": 8, "y": 16},
       "id": 8,
-      "targets": [{"expr": "sum by (outcome) (rate(fanoutbench_groups_total{outcome!=\"success\"}[$__rate_interval]))", "legendFormat": "{{outcome}}", "refId": "A"}],
+      "targets": [{"expr": "sum by (outcome) (fanoutbench_groups_total{outcome!=\"success\"})", "legendFormat": "{{outcome}}", "refId": "A"}],
       "title": "Failed/cancelled groups",
       "type": "timeseries"
     },
@@ -85,8 +86,8 @@
       "gridPos": {"h": 8, "w": 8, "x": 16, "y": 16},
       "id": 9,
       "options": {"reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}},
-      "targets": [{"expr": "velaserve_zeroing_artifact_complete", "refId": "A"}],
-      "title": "Artifact completeness",
+      "targets": [{"expr": "velaserve_artifact_complete", "refId": "A"}],
+      "title": "Verified artifact completeness",
       "type": "stat"
     }
   ],

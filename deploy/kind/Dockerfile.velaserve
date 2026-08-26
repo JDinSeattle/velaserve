@@ -6,7 +6,12 @@ COPY velaserve-gate /app/velaserve-gate
 COPY oracle-replay /app/oracle-replay
 COPY schema-check /app/schema-check
 COPY condition-controller /app/condition-controller
+COPY condition-driver /app/condition-driver
+COPY clock-probe /app/clock-probe
 COPY epp-normalize /app/epp-normalize
+COPY envoy-normalize /app/envoy-normalize
+COPY vllm-normalize /app/vllm-normalize
+COPY p2p-runtime-normalize /app/p2p-runtime-normalize
 COPY source-pressure-compile /app/source-pressure-compile
 USER 65532:65532
 ENTRYPOINT ["/app/simfleet"]

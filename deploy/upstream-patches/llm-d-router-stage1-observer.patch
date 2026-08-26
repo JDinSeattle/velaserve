@@ -1,82 +1,106 @@
-diff --git a/pkg/epp/scheduling/scheduler.go b/pkg/epp/scheduling/scheduler.go
-index e5d3cbf..83d0d9f 100644
---- a/pkg/epp/scheduling/scheduler.go
-+++ b/pkg/epp/scheduling/scheduler.go
-@@ -143,6 +143,9 @@ func (s *Scheduler) Schedule(ctx context.Context, request *fwksched.InferenceRe
- 		err = errors.Join(errs...)
- 	}
- 
-+	if err == nil {
-+		recordVelaServeScheduling(request, result, candidateEndpoints)
+diff --git a/pkg/epp/requestcontrol/director.go b/pkg/epp/requestcontrol/director.go
+index b6896ca3..9f98e484 100644
+--- a/pkg/epp/requestcontrol/director.go
++++ b/pkg/epp/requestcontrol/director.go
+@@ -306,9 +306,10 @@
+-	reqCtx, err = d.prepareRequest(ctx, reqCtx, result)
+-	if err != nil {
+-		return reqCtx, err
+-	}
+-	if err := d.repackage(ctx, reqCtx, inferenceRequestBody); err != nil {
+-		return reqCtx, err
+-	}
+-	return reqCtx, nil
++	reqCtx, err = d.prepareRequest(ctx, reqCtx, result)
++	if err != nil {
++		return reqCtx, err
 +	}
- 	return result, err
++	recordVelaServeScheduling(reqCtx.SchedulingRequest, result, snapshotOfCandidatePods)
++	if err := d.repackage(ctx, reqCtx, inferenceRequestBody); err != nil {
++		return reqCtx, err
++	}
++	return reqCtx, nil
  }
- 
-diff --git a/pkg/epp/scheduling/velaserve_observer.go b/pkg/epp/scheduling/velaserve_observer.go
+diff --git a/pkg/epp/requestcontrol/velaserve_observer.go b/pkg/epp/requestcontrol/velaserve_observer.go
 new file mode 100644
-index 0000000..6589fd0
+index 00000000..6eb7f422
 --- /dev/null
-+++ b/pkg/epp/scheduling/velaserve_observer.go
-@@ -0,0 +1,129 @@
-+package scheduling
++++ b/pkg/epp/requestcontrol/velaserve_observer.go
+@@ -0,0 +1,206 @@
++package requestcontrol
 +
 +import (
 +	"encoding/json"
 +	"fmt"
++	"net"
 +	"os"
 +	"strings"
 +	"sync"
 +	"time"
 +
-+	attrprefix "github.com/llm-d/llm-d-router/pkg/epp/framework/plugins/datalayer/attribute/prefix"
++	"github.com/llm-d/llm-d-router/pkg/common/routing"
 +	fwksched "github.com/llm-d/llm-d-router/pkg/epp/framework/interface/scheduling"
++	attrprefix "github.com/llm-d/llm-d-router/pkg/epp/framework/plugins/datalayer/attribute/prefix"
 +)
 +
 +const (
-+	velaVersionHeader = "x-vela-fanout-version"
-+	velaGroupHeader   = "x-vela-fanout-group"
-+	velaPrefixProducer = "precise-prefix-cache-producer"
++	velaVersionHeader     = "x-vela-fanout-version"
++	velaGroupHeader       = "x-vela-fanout-group"
++	velaPrefixProducer    = "precise-prefix-cache-producer"
++	velaSourceIDHeader    = "x-velaserve-p2p-source-id"
++	velaSourceModelHeader = "x-velaserve-p2p-source-model"
 +)
 +
 +var velaRecordLock sync.Mutex
 +
 +type velaEndpointRef struct {
-+	ID string `json:"id"`
++	ID    string `json:"id"`
 +	Model string `json:"model"`
-+	Zone string `json:"zone,omitempty"`
++	Zone  string `json:"zone,omitempty"`
 +}
 +
 +type velaPrefixSource struct {
-+	Source velaEndpointRef `json:"source"`
-+	CachedTokens uint64 `json:"cached_tokens"`
-+	TransferBytes uint64 `json:"transfer_bytes"`
++	Source        velaEndpointRef `json:"source"`
++	CachedTokens  uint64          `json:"cached_tokens"`
++	TransferBytes uint64          `json:"transfer_bytes"`
++}
++
++type velaEndpointScore struct {
++	Endpoint velaEndpointRef `json:"endpoint"`
++	Score    float64         `json:"score"`
 +}
 +
 +type velaEndpointState struct {
-+	Ref velaEndpointRef `json:"ref"`
-+	Healthy bool `json:"healthy"`
-+	Compatible bool `json:"compatible"`
-+	AvailableAtSeconds float64 `json:"available_at_seconds"`
-+	QueueDepth uint32 `json:"queue_depth"`
-+	RunningRequests uint32 `json:"running_requests"`
-+	LocalPrefixTokens uint64 `json:"local_prefix_tokens"`
-+	ObservedInflight uint32 `json:"observed_inflight"`
-+	InflightPublishedAt *time.Time `json:"inflight_published_at,omitempty"`
-+	P2PSources []velaPrefixSource `json:"p2p_sources,omitempty"`
++	Ref                 velaEndpointRef    `json:"ref"`
++	Healthy             bool               `json:"healthy"`
++	Compatible          bool               `json:"compatible"`
++	AvailableAtSeconds  float64            `json:"available_at_seconds"`
++	QueueDepth          uint32             `json:"queue_depth"`
++	RunningRequests     uint32             `json:"running_requests"`
++	LocalPrefixTokens   uint64             `json:"local_prefix_tokens"`
++	SourcePrefixTokens  uint64             `json:"source_prefix_tokens"`
++	ObservedInflight    uint32             `json:"observed_inflight"`
++	InflightPublishedAt *time.Time         `json:"inflight_published_at,omitempty"`
++	P2PSources          []velaPrefixSource `json:"p2p_sources,omitempty"`
 +}
 +
 +type velaSnapshot struct {
-+	ObservedAt time.Time `json:"observed_at"`
-+	Endpoints []velaEndpointState `json:"endpoints"`
++	ObservedAt time.Time           `json:"observed_at"`
++	Endpoints  []velaEndpointState `json:"endpoints"`
 +}
 +
 +type velaRecord struct {
-+	SchemaVersion string `json:"schema_version"`
-+	RequestID string `json:"request_id"`
-+	GroupID string `json:"group_id"`
-+	ObservedAt time.Time `json:"observed_at"`
-+	Snapshot velaSnapshot `json:"snapshot"`
-+	Target velaEndpointRef `json:"target"`
++	SchemaVersion     string              `json:"schema_version"`
++	RequestID         string              `json:"request_id"`
++	GroupID           string              `json:"group_id"`
++	ObservedAt        time.Time           `json:"observed_at"`
++	Snapshot          velaSnapshot        `json:"snapshot"`
++	Target            velaEndpointRef     `json:"target"`
++	TargetHost        string              `json:"target_host"`
++	ScoredCandidates  []velaEndpointScore `json:"scored_candidates,omitempty"`
++	SelectedP2PSource *velaPrefixSource   `json:"selected_p2p_source,omitempty"`
++	SelectedP2PSourceHost string          `json:"selected_p2p_source_host,omitempty"`
++	SelectedP2PSourcePort uint32          `json:"selected_p2p_source_port,omitempty"`
 +}
 +
 +func recordVelaServeScheduling(request *fwksched.InferenceRequest, result *fwksched.SchedulingResult, candidates []fwksched.Endpoint) {
@@ -91,59 +115,139 @@ index 0000000..6589fd0
 +	observedAt := time.Now().UTC()
 +	states := make([]velaEndpointState, 0, len(candidates))
 +	sourceTokens := make(map[string]uint64, len(candidates))
++	hosts := make(map[string]velaEndpointRef, len(candidates))
 +	for _, endpoint := range candidates {
-+		if endpoint == nil || endpoint.GetMetadata() == nil { continue }
++		if endpoint == nil || endpoint.GetMetadata() == nil {
++			continue
++		}
 +		ref := endpointRef(endpoint, request.TargetModel)
 +		local, source := prefixTokens(endpoint)
 +		sourceTokens[ref.ID] = source
-+		state := velaEndpointState{Ref: ref, Healthy: true, Compatible: true, LocalPrefixTokens: local}
++		metadata := endpoint.GetMetadata()
++		hosts[net.JoinHostPort(metadata.Address, metadata.Port)] = ref
++		// candidates is the post-screener eligible set passed to the scheduler.
++		state := velaEndpointState{Ref: ref, Healthy: true, Compatible: true, LocalPrefixTokens: local, SourcePrefixTokens: source}
 +		if metrics := endpoint.GetMetrics(); metrics != nil {
-+			if metrics.WaitingQueueSize > 0 { state.QueueDepth = uint32(metrics.WaitingQueueSize) }
++			if metrics.WaitingQueueSize > 0 {
++				state.QueueDepth = uint32(metrics.WaitingQueueSize)
++			}
 +			if metrics.RunningRequestsSize > 0 {
 +				state.RunningRequests = uint32(metrics.RunningRequestsSize)
 +				state.ObservedInflight = uint32(metrics.RunningRequestsSize)
 +			}
-+			if !metrics.UpdateTime.IsZero() { published := metrics.UpdateTime.UTC(); state.InflightPublishedAt = &published }
++			if !metrics.UpdateTime.IsZero() {
++				published := metrics.UpdateTime.UTC()
++				state.InflightPublishedAt = &published
++			}
 +		}
 +		states = append(states, state)
 +	}
-+	for index := range states {
-+		for _, source := range states {
-+			if source.Ref.ID == states[index].Ref.ID || sourceTokens[source.Ref.ID] == 0 { continue }
-+			states[index].P2PSources = append(states[index].P2PSources, velaPrefixSource{Source: source.Ref, CachedTokens: sourceTokens[source.Ref.ID]})
++	target := endpointRef(primary.TargetEndpoints[0], request.TargetModel)
++	targetMetadata := primary.TargetEndpoints[0].GetMetadata()
++	targetHost := net.JoinHostPort(targetMetadata.Address, targetMetadata.Port)
++	delete(request.Headers, velaSourceIDHeader)
++	delete(request.Headers, velaSourceModelHeader)
++	// PrefixCacheMatchInfo is the per-request indexed eligibility view used by
++	// the pinned offloading scorer. Materialize every eligible remote CPU-tier
++	// source on every counterfactual compute target so offline replay does not
++	// confuse an unselected target with an unavailable P2P path.
++	for targetIndex := range states {
++		for _, sourceState := range states {
++			cachedTokens := sourceTokens[sourceState.Ref.ID]
++			if cachedTokens > 0 && sourceState.Ref != states[targetIndex].Ref {
++				states[targetIndex].P2PSources = append(states[targetIndex].P2PSources, velaPrefixSource{Source: sourceState.Ref, CachedTokens: cachedTokens})
++			}
 +		}
++	}
++	var selected *velaPrefixSource
++	var selectedHost string
++	var selectedPort uint32
++	if sourceHostPort := strings.TrimSpace(request.Headers[routing.KVCacheSourceHeader]); sourceHostPort != "" {
++		sourceRef, exists := hosts[sourceHostPort]
++		if !exists || sourceTokens[sourceRef.ID] == 0 {
++			return
++		}
++		host, _, err := net.SplitHostPort(sourceHostPort)
++		if err != nil || strings.TrimSpace(host) == "" {
++			return
++		}
++		selected = &velaPrefixSource{Source: sourceRef, CachedTokens: sourceTokens[sourceRef.ID]}
++		selectedHost, selectedPort = host, 7777
++		request.Headers[velaSourceIDHeader] = sourceRef.ID
++		request.Headers[velaSourceModelHeader] = sourceRef.Model
++	}
++	scores := make([]velaEndpointScore, 0, len(primary.ScoredCandidates))
++	for _, scored := range primary.ScoredCandidates {
++		if scored.Endpoint == nil || scored.Endpoint.GetMetadata() == nil {
++			continue
++		}
++		scores = append(scores, velaEndpointScore{Endpoint: endpointRef(scored.Endpoint, request.TargetModel), Score: scored.Score})
 +	}
 +	record := velaRecord{
 +		SchemaVersion: "velaserve.epp-scheduling/v1", RequestID: request.RequestID, GroupID: groupID,
-+		ObservedAt: observedAt, Snapshot: velaSnapshot{ObservedAt: observedAt, Endpoints: states},
-+		Target: endpointRef(primary.TargetEndpoints[0], request.TargetModel),
++		ObservedAt: observedAt, Snapshot: velaSnapshot{ObservedAt: observedAt, Endpoints: states}, Target: target, TargetHost: targetHost,
++		ScoredCandidates: scores, SelectedP2PSource: selected, SelectedP2PSourceHost: selectedHost, SelectedP2PSourcePort: selectedPort,
 +	}
 +	encoded, err := json.Marshal(record)
-+	if err != nil { return }
++	if err != nil {
++		return
++	}
 +	velaRecordLock.Lock()
 +	defer velaRecordLock.Unlock()
 +	_, _ = fmt.Fprintf(os.Stdout, "VELASERVE_EPP_RECORD %s\n", encoded)
 +}
 +
 +func headerValue(headers map[string]string, name string) string {
-+	for key, value := range headers { if strings.EqualFold(key, name) { return strings.TrimSpace(value) } }
++	for key, value := range headers {
++		if strings.EqualFold(key, name) {
++			return strings.TrimSpace(value)
++		}
++	}
 +	return ""
 +}
 +
 +func endpointRef(endpoint fwksched.Endpoint, model string) velaEndpointRef {
 +	metadata := endpoint.GetMetadata()
 +	id := metadata.Name
-+	if id == "" { id = metadata.ID.String() }
++	if id == "" {
++		id = metadata.ID.String()
++	}
 +	return velaEndpointRef{ID: id, Model: model, Zone: metadata.Labels["topology.kubernetes.io/zone"]}
 +}
 +
 +func prefixTokens(endpoint fwksched.Endpoint) (local, source uint64) {
 +	key := attrprefix.PrefixCacheMatchInfoDataKey.WithNonEmptyProducerName(velaPrefixProducer)
 +	raw, ok := endpoint.Get(key)
-+	if !ok { return 0, 0 }
++	if !ok {
++		return 0, 0
++	}
 +	info, ok := raw.(*attrprefix.PrefixCacheMatchInfo)
-+	if !ok || info.BlockSizeTokens() <= 0 { return 0, 0 }
++	if !ok || info.BlockSizeTokens() <= 0 {
++		return 0, 0
++	}
 +	local = uint64(info.CachedBlockCount() * info.BlockSizeTokens())
-+	if tiers := info.CachedBlocksByTier(); tiers != nil { source = uint64(tiers["cpu"] * info.BlockSizeTokens()) } else { source = local }
++	if tiers := info.CachedBlocksByTier(); tiers != nil {
++		source = uint64(tiers["cpu"] * info.BlockSizeTokens())
++	} else {
++		source = local
++	}
 +	return local, source
 +}
+diff --git a/config/charts/llm-d-router-standalone/values.yaml b/config/charts/llm-d-router-standalone/values.yaml
+--- a/config/charts/llm-d-router-standalone/values.yaml
++++ b/config/charts/llm-d-router-standalone/values.yaml
+@@ -106,13 +106,10 @@ router:
+                     per_connection_buffer_limit_bytes: 32768
+                     access_log:
+                       - name: envoy.access_loggers.file
+-                        filter:
+-                          response_flag_filter:
+-                            flags: ["NR"]
+                         typed_config:
+                           "@type": type.googleapis.com/envoy.extensions.access_loggers.file.v3.FileAccessLog
+                           path: /dev/stdout
+                           log_format:
+                             text_format_source:
+-                              inline_string: "{\"start_time\":\"%START_TIME%\",\"method\":\"%REQ(:METHOD)%\",...}\n"
++                              inline_string: "{\"START_TIME\":\"%START_TIME%\",\"REQ(X-REQUEST-ID)\":\"%REQ(X-REQUEST-ID)%\",\"REQ(X-VELA-FANOUT-GROUP)\":\"%REQ(X-VELA-FANOUT-GROUP)%\",\"UPSTREAM_HOST\":\"%UPSTREAM_HOST%\",\"RESPONSE_CODE\":%RESPONSE_CODE%,\"DURATION\":%DURATION%,\"TRACE_ID\":\"%TRACE_ID%\",\"SPAN_ID\":\"%SPAN_ID%\"}\n"
+                     filter_chains:

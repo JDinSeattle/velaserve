@@ -50,6 +50,27 @@ func TestArmsPinSameImagesAndDifferOnlyByRoutingProfile(t *testing.T) {
 	}
 }
 
+func TestRenderedArmsFreezeExactUpstreamComparators(t *testing.T) {
+	t.Parallel()
+	armA := renderStageOne(t, "arm-a-values.yaml")
+	for _, required := range []string{"type: prefix-cache-scorer", "type: max-score-picker", "type: p2p-source-producer"} {
+		if !strings.Contains(armA, required) {
+			t.Fatalf("Arm A is missing exact upstream affinity component %q", required)
+		}
+	}
+	armB := renderStageOne(t, "arm-b-values.yaml")
+	for _, required := range []string{"type: load-aware-scorer", "threshold: 128", "type: max-score-picker", "type: p2p-source-producer"} {
+		if !strings.Contains(armB, required) {
+			t.Fatalf("Arm B is missing exact upstream load-aware component %q", required)
+		}
+	}
+	for _, forbidden := range []string{"type: weighted-random-picker", "type: queue-scorer", "type: kv-cache-utilization-scorer", "type: prefix-cache-scorer"} {
+		if strings.Contains(armB, forbidden) {
+			t.Fatalf("Arm B contains comparator-changing plugin %q", forbidden)
+		}
+	}
+}
+
 func TestRealGPUValuesRouteOnlyToTheDeclaredModelService(t *testing.T) {
 	repository := repositoryRoot(t)
 	helm := findHelm(t, repository)
@@ -57,6 +78,7 @@ func TestRealGPUValuesRouteOnlyToTheDeclaredModelService(t *testing.T) {
 		"template", "velaserve", filepath.Join(repository, "deploy", "helm", "velaserve"),
 		"--namespace", "velaserve-z0",
 		"-f", filepath.Join(repository, "deploy", "experiments", "aws-z0-values.yaml"),
+		"--set", "model.minCachedTokenDelta=4096",
 		"--set", "images.velaserve.digest=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 		"--set-string", "images.upstreamEPP.tag=git-ab723b898f8598ab6631e9848a4cf28accd9b9ea@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
 	)
@@ -86,6 +108,7 @@ func TestRealGPUValuesRequireDigestAddressedEPP(t *testing.T) {
 		"template", "velaserve", filepath.Join(repository, "deploy", "helm", "velaserve"),
 		"--namespace", "velaserve-z0",
 		"-f", filepath.Join(repository, "deploy", "experiments", "aws-z0-values.yaml"),
+		"--set", "model.minCachedTokenDelta=4096",
 		"--set", "images.velaserve.digest=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 	)
 	output, err := command.CombinedOutput()

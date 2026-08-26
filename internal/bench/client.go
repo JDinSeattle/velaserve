@@ -37,21 +37,24 @@ type Client struct {
 	Now                         func() time.Time
 	SimulatorMode               bool
 	ConditionControllerEndpoint string
+	ConditionControlToken       string
 	RequireConditionAttestation bool
-	PrefixSourceCount           uint32
 }
 
 type GroupRequest struct {
-	RunID        string
-	Arm          evidence.Arm
-	Model        string
-	CommonPrefix string
-	Suffixes     []string
-	MaxTokens    uint32
-	MaxWidth     uint32
-	ArrivalSkew  time.Duration
-	Timeout      time.Duration
-	Cell         evidence.BenchmarkCell
+	RunID             string
+	Arm               evidence.Arm
+	Model             string
+	CommonPrefix      string
+	WarmupContent     string
+	Suffixes          []string
+	MaxTokens         uint32
+	MaxWidth          uint32
+	ArrivalSkew       time.Duration
+	Timeout           time.Duration
+	Cell              evidence.BenchmarkCell
+	PrefixSourceCount uint32
+	OwnerRotation     uint32
 }
 
 // RunGroup sends every sibling and waits for every terminal result. Per-child
@@ -102,8 +105,25 @@ func (client Client) RunGroup(ctx context.Context, request GroupRequest) (eviden
 		}()
 	}
 	waitGroup.Wait()
-
 	result := summarizeGroup(request, group.GroupID, children)
+	if condition != nil {
+		finalizeContext, cancel := context.WithTimeout(context.Background(), request.Timeout)
+		finalized, err := client.finalizeCondition(finalizeContext, group.GroupID, request)
+		cancel()
+		if err != nil {
+			failure := fmt.Sprintf("finalize workload condition: %v", err)
+			result.Outcome = evidence.OutcomeFailure
+			result.Failure = failure
+			result.Condition = condition
+			result.ConditionFailure = failure
+			if validationErr := evidence.ValidateGroupResult(result); validationErr != nil {
+				return evidence.GroupResult{}, fmt.Errorf("retain failed condition finalization evidence: %w", validationErr)
+			}
+			return result, fmt.Errorf("%s", failure)
+		}
+		condition = &finalized
+	}
+
 	result.Condition = condition
 	if err := evidence.ValidateGroupResult(result); err != nil {
 		return evidence.GroupResult{}, fmt.Errorf("internal group evidence is invalid: %w", err)
@@ -127,6 +147,9 @@ func (client Client) validate(request GroupRequest) error {
 	}
 	if strings.TrimSpace(request.CommonPrefix) == "" {
 		return fmt.Errorf("common prefix is required")
+	}
+	if client.RequireConditionAttestation && (strings.TrimSpace(request.WarmupContent) == "" || !strings.HasPrefix(request.WarmupContent, request.CommonPrefix)) {
+		return fmt.Errorf("condition-attested runs require the calibrated warmup content")
 	}
 	width := uint32(len(request.Suffixes))
 	if width == 0 || request.MaxWidth == 0 || width > request.MaxWidth {
@@ -269,6 +292,8 @@ func (client Client) runChild(
 		TTFTSeconds:    stream.TTFT.Seconds(),
 		LatencySeconds: stream.Latency.Seconds(),
 		OutputTokens:   stream.OutputTokens,
+		PromptTokens:   stream.PromptTokens,
+		CachedTokens:   stream.CachedTokens,
 		Outcome:        evidence.OutcomeSuccess,
 		DispatchedAt:   timePointer(dispatchedAt),
 		FirstTokenAt:   stream.FirstTokenAt,
@@ -336,6 +361,9 @@ func summarizeGroup(request GroupRequest, groupID string, children []evidence.Ch
 	var firstDispatch, lastTerminal time.Time
 	failures := make([]string, 0)
 	cancelled := 0
+	recomputedPrefixTokens := uint64(0)
+	recomputedMeasured := request.Cell.PrefixTokens > 0
+	successfulChildren := 0
 	for slot, child := range children {
 		if child.DispatchedAt != nil && (firstDispatch.IsZero() || child.DispatchedAt.Before(firstDispatch)) {
 			firstDispatch = *child.DispatchedAt
@@ -351,7 +379,23 @@ func summarizeGroup(request GroupRequest, groupID string, children []evidence.Ch
 			if child.Outcome == evidence.OutcomeCancelled {
 				cancelled++
 			}
+		} else {
+			successfulChildren++
+			if child.CachedTokens == nil || child.PromptTokens == 0 {
+				recomputedMeasured = false
+			} else {
+				cachedSharedTokens := min(*child.CachedTokens, request.Cell.PrefixTokens)
+				recomputed := request.Cell.PrefixTokens - cachedSharedTokens
+				if ^uint64(0)-recomputedPrefixTokens < recomputed {
+					recomputedMeasured = false
+				} else {
+					recomputedPrefixTokens += recomputed
+				}
+			}
 		}
+	}
+	if recomputedMeasured && successfulChildren > 0 {
+		result.RecomputedPrefixTokens = &recomputedPrefixTokens
 	}
 	if !firstDispatch.IsZero() && !lastTerminal.IsZero() {
 		makespan := lastTerminal.Sub(firstDispatch)

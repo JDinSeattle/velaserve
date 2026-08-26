@@ -29,6 +29,36 @@ func TestReadStreamCountsTTFTAtFirstContentDelta(t *testing.T) {
 	}
 }
 
+func TestReadStreamRetainsPromptCacheUsage(t *testing.T) {
+	start := time.Date(2026, 8, 25, 20, 0, 0, 0, time.UTC)
+	stream := strings.NewReader("data: {\"choices\":[{\"delta\":{\"content\":\"ok\"}}]}\n\n" +
+		"data: {\"choices\":[],\"usage\":{\"prompt_tokens\":4097,\"completion_tokens\":1,\"prompt_tokens_details\":{\"cached_tokens\":4096}}}\n\n" +
+		"data: [DONE]\n\n")
+	clock := &sequenceClock{times: []time.Time{start.Add(time.Millisecond), start.Add(2 * time.Millisecond), start.Add(3 * time.Millisecond)}}
+	got, err := ReadStream(stream, StreamOptions{StartedAt: start, Clock: clock, MaxEventBytes: 2048})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.PromptTokens != 4097 || got.CachedTokens == nil || *got.CachedTokens != 4096 {
+		t.Fatalf("usage = %#v", got)
+	}
+}
+
+func TestReadStreamDoesNotInventZeroForNullPromptTokenDetails(t *testing.T) {
+	start := time.Date(2026, 8, 25, 20, 0, 0, 0, time.UTC)
+	stream := strings.NewReader("data: {\"choices\":[{\"delta\":{\"content\":\"ok\"}}]}\n\n" +
+		"data: {\"choices\":[],\"usage\":{\"prompt_tokens\":4097,\"completion_tokens\":1,\"prompt_tokens_details\":null}}\n\n" +
+		"data: [DONE]\n\n")
+	clock := &sequenceClock{times: []time.Time{start.Add(time.Millisecond), start.Add(2 * time.Millisecond), start.Add(3 * time.Millisecond)}}
+	got, err := ReadStream(stream, StreamOptions{StartedAt: start, Clock: clock, MaxEventBytes: 2048})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.PromptTokens != 4097 || got.CachedTokens != nil {
+		t.Fatalf("null cache details became measured usage: %#v", got)
+	}
+}
+
 func TestReadStreamSupportsCRLFCommentsAndMultilineData(t *testing.T) {
 	start := time.Date(2026, 8, 25, 20, 0, 0, 0, time.UTC)
 	stream := strings.NewReader(": keepalive\r\n" +

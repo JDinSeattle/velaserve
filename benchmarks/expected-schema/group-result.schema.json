@@ -19,7 +19,8 @@
     "outcome": {"enum": ["success", "failure", "cancelled"]},
     "failure": {"type": "string", "minLength": 1},
     "children": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/child"}},
-    "condition": {"$ref": "#/$defs/condition"}
+    "condition": {"$ref": "#/$defs/condition"},
+    "condition_failure": {"type": "string", "minLength": 1}
   },
   "$defs": {
     "benchmarkCell": {
@@ -48,7 +49,7 @@
     "condition": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["schema_version", "run_id", "group_id", "load_regime", "cache_state", "controller_revision", "state_sha256", "observed_state", "applied_at"],
+      "required": ["schema_version", "run_id", "group_id", "load_regime", "cache_state", "owner_rotation", "controller_revision", "state_sha256", "observed_state", "applied_at", "finalized_at"],
       "properties": {
         "schema_version": {"const": "velaserve.condition-attestation/v1"},
         "run_id": {"type": "string", "minLength": 1},
@@ -56,21 +57,31 @@
         "load_regime": {"enum": ["idle", "moderate", "near-saturation"]},
         "cache_state": {"enum": ["warm-owner", "distributed-warm", "cold"]},
         "prefix_source_count": {"enum": [1, 2, 4]},
+        "owner_rotation": {"type": "integer", "minimum": 0},
         "controller_revision": {"type": "string", "minLength": 1},
         "state_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
         "observed_state": {"$ref": "#/$defs/conditionObservedState"},
         "applied_at": {"type": "string", "format": "date-time"}
+        ,"finalized_at": {"type": ["string", "null"], "format": "date-time"}
       }
     },
     "conditionObservedState": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["offered_load_qps", "achieved_load_qps", "saturation_qps", "cached_endpoint_ids", "measurement_source"],
+      "required": ["offered_load_qps", "achieved_load_qps", "saturation_qps", "load_profile_sha256", "load_profiles_sha256", "load_calibration_sha256", "cached_endpoint_ids", "owner_endpoint_order", "drained_endpoint_ids", "drain_stable_samples", "dropped_load_requests", "ordinary_traffic_mean_latency_seconds", "measurement_source"],
       "properties": {
         "offered_load_qps": {"type": "number", "minimum": 0},
         "achieved_load_qps": {"type": "number", "minimum": 0},
         "saturation_qps": {"type": "number", "exclusiveMinimum": 0},
+        "load_profile_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "load_profiles_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "load_calibration_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
         "cached_endpoint_ids": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+        "owner_endpoint_order": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+        "drained_endpoint_ids": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+        "drain_stable_samples": {"type": "integer", "minimum": 2},
+        "dropped_load_requests": {"const": 0},
+        "ordinary_traffic_mean_latency_seconds": {"type": "number", "minimum": 0},
         "prefix_source_endpoint_ids": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
         "measurement_source": {"type": "string", "minLength": 1}
       }
@@ -78,13 +89,15 @@
     "child": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["request_id", "ttft_seconds", "latency_seconds", "output_tokens", "outcome"],
+      "required": ["request_id", "ttft_seconds", "latency_seconds", "output_tokens", "outcome", "completed_at"],
       "properties": {
         "request_id": {"type": "string", "minLength": 1},
         "target": {"$ref": "#/$defs/endpointRef"},
         "ttft_seconds": {"type": "number", "minimum": 0},
         "latency_seconds": {"type": "number", "minimum": 0},
         "output_tokens": {"type": "integer", "minimum": 0},
+        "prompt_tokens": {"type": "integer", "minimum": 0},
+        "cached_tokens": {"type": "integer", "minimum": 0},
         "outcome": {"enum": ["success", "failure", "cancelled"]},
         "failure": {"type": "string", "minLength": 1},
         "dispatched_at": {"type": "string", "format": "date-time"},

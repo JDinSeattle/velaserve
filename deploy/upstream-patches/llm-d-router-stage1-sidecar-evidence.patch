@@ -1,0 +1,63 @@
+diff --git a/pkg/sidecar/proxy/connector_p2p.go b/pkg/sidecar/proxy/connector_p2p.go
+index 2aec135f..2aba2511 100644
+--- a/pkg/sidecar/proxy/connector_p2p.go
++++ b/pkg/sidecar/proxy/connector_p2p.go
+@@ -265,12 +265,21 @@ func normalizeEndpoint(s string) string {
+ // p2pSourceParams builds the kv_transfer_params.remote_kv_source block for a
+ // pull from sourceHostPort's OffloadingConnector P2P tier. The kv_request_id is its
+ // own fresh UUID: in P2P mode it is consumer-side only.
+-func (s *Server) p2pSourceParams(sourceHostPort string) map[string]any {
+-	return map[string]any{
++func (s *Server) p2pSourceParams(sourceHostPort string, headers ...http.Header) map[string]any {
++	params := map[string]any{
+ 		requestFieldKVRequestID: newUUID(),
+ 		requestFieldRemoteHost:  extractHost(sourceHostPort),
+ 		requestFieldRemotePort:  s.p2pPortFor(sourceHostPort),
+ 	}
++	if len(headers) == 1 {
++		sourceID := strings.TrimSpace(headers[0].Get("X-VelaServe-P2P-Source-ID"))
++		sourceModel := strings.TrimSpace(headers[0].Get("X-VelaServe-P2P-Source-Model"))
++		if sourceID != "" && sourceModel != "" {
++			params["velaserve_source_id"] = sourceID
++			params["velaserve_source_model"] = sourceModel
++		}
++	}
++	return params
+ }
+ 
+ // p2pPortFor resolves the P2P tier control port on the target endpoint. The
+@@ -337,7 +346,7 @@ func (s *Server) decodeWithP2PSource(w http.ResponseWriter, r *http.Request, sou
+ 		return
+ 	}
+ 
+-	p2pParams := s.p2pSourceParams(source)
++	p2pParams := s.p2pSourceParams(source, r.Header)
+ 	// Rebuild kv_transfer_params from scratch: the sidecar owns this field, so
+ 	// client-supplied keys are dropped rather than forwarded to vLLM.
+ 	requestData[requestFieldKVTransferParams] = map[string]any{requestFieldRemoteKVSource: p2pParams}
+diff --git a/pkg/sidecar/proxy/connector_p2p_source_test.go b/pkg/sidecar/proxy/connector_p2p_source_test.go
+index 5c3332ff..e3f7d33d 100644
+--- a/pkg/sidecar/proxy/connector_p2p_source_test.go
++++ b/pkg/sidecar/proxy/connector_p2p_source_test.go
+@@ -76,7 +76,11 @@ var _ = Describe("P2P KV cache source header", func() {
+ 	It("should inject remote_kv_source params on the local request without disaggregation", func() {
+ 		proxyBaseAddr := testInfo.startProxy()
+ 
+-		sendRequest(proxyBaseAddr, map[string]string{routing.KVCacheSourceHeader: kvCacheSource})
++		sendRequest(proxyBaseAddr, map[string]string{
++			routing.KVCacheSourceHeader:     kvCacheSource,
++			"X-VelaServe-P2P-Source-ID":    "model-0",
++			"X-VelaServe-P2P-Source-Model": "Qwen/Qwen3-8B",
++		})
+ 
+ 		decodeReqs := testInfo.decodeHandler.GetCompletionRequests()
+ 		Expect(decodeReqs).To(HaveLen(1))
+@@ -91,6 +95,8 @@ var _ = Describe("P2P KV cache source header", func() {
+ 		Expect(p2p[requestFieldKVRequestID]).ToNot(BeEmpty())
+ 		Expect(p2p[requestFieldRemoteHost]).To(Equal("10.9.9.9"))
+ 		Expect(p2p[requestFieldRemotePort]).To(BeNumerically("==", p2pConnectorPort))
++		Expect(p2p["velaserve_source_id"]).To(Equal("model-0"))
++		Expect(p2p["velaserve_source_model"]).To(Equal("Qwen/Qwen3-8B"))
+ 
+ 		// The caller's token limits are untouched.
+ 		Expect(dreq[requestFieldMaxTokens]).To(BeNumerically("==", 50))

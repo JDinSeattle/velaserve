@@ -1,0 +1,120 @@
+{{- if .Values.conditionDriver.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: velaserve-condition-driver
+  labels:
+    app.kubernetes.io/name: velaserve-condition-driver
+    {{- include "velaserve.labels" . | nindent 4 }}
+data:
+  endpoints.json: {{ required "conditionDriver.endpoints is required when enabled" .Values.conditionDriver.endpoints | toJson | quote }}
+  load-profiles.json: {{ required "conditionDriver.loadProfiles is required when enabled" .Values.conditionDriver.loadProfiles | toJson | quote }}
+  load-calibration.json: {{ required "conditionDriver.loadCalibration is required when enabled" .Values.conditionDriver.loadCalibration | toJson | quote }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: velaserve-condition-driver
+  labels:
+    app.kubernetes.io/name: velaserve-condition-driver
+    {{- include "velaserve.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: velaserve-condition-driver
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: velaserve-condition-driver
+      annotations:
+        checksum/condition-driver-config: {{ dict "endpoints" .Values.conditionDriver.endpoints "loadProfiles" .Values.conditionDriver.loadProfiles "loadCalibration" .Values.conditionDriver.loadCalibration | toJson | sha256sum | quote }}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: condition-driver
+          image: {{ include "velaserve.image" . }}
+          imagePullPolicy: {{ .Values.images.velaserve.pullPolicy }}
+          command: ["/app/condition-driver"]
+          env:
+            - name: VELASERVE_DRIVER_MODEL
+              value: {{ required "conditionDriver.model is required when enabled" .Values.conditionDriver.model | quote }}
+            - name: VELASERVE_DRIVER_GATEWAY_CHAT_URL
+              value: {{ required "conditionDriver.gatewayChatURL is required when enabled" .Values.conditionDriver.gatewayChatURL | quote }}
+            - name: VELASERVE_DRIVER_LOAD_PROFILES_FILE
+              value: /etc/velaserve/load-profiles.json
+            - name: VELASERVE_DRIVER_LOAD_CALIBRATION_FILE
+              value: /etc/velaserve/load-calibration.json
+            - name: VELASERVE_DRIVER_STABILIZATION_SECONDS
+              value: {{ required "conditionDriver.stabilizationSeconds is required when enabled" .Values.conditionDriver.stabilizationSeconds | quote }}
+            - name: VELASERVE_DRIVER_REQUEST_TIMEOUT_SECONDS
+              value: {{ required "conditionDriver.requestTimeoutSeconds is required when enabled" .Values.conditionDriver.requestTimeoutSeconds | quote }}
+            - name: VELASERVE_DRIVER_DRAIN_TIMEOUT_SECONDS
+              value: {{ required "conditionDriver.drainTimeoutSeconds is required when enabled" .Values.conditionDriver.drainTimeoutSeconds | quote }}
+            - name: VELASERVE_DRIVER_DRAIN_POLL_MILLISECONDS
+              value: {{ required "conditionDriver.drainPollMilliseconds is required when enabled" .Values.conditionDriver.drainPollMilliseconds | quote }}
+            - name: VELASERVE_DRIVER_ENDPOINTS_FILE
+              value: /etc/velaserve/endpoints.json
+            - name: VELASERVE_DRIVER_LISTEN
+              value: {{ printf ":%d" (int .Values.conditionDriver.port) | quote }}
+            - name: VELASERVE_CONDITION_CONTROL_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ required "conditionControlSecret.name is required when the driver is enabled" .Values.conditionControlSecret.name | quote }}
+                  key: {{ required "conditionControlSecret.key is required when the driver is enabled" .Values.conditionControlSecret.key | quote }}
+            {{- if .Values.conditionDriver.authorizationSecret.name }}
+            - name: VELASERVE_DRIVER_AUTHORIZATION_FILE
+              value: /run/secrets/velaserve/authorization
+            {{- end }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.conditionDriver.port }}
+          readinessProbe:
+            httpGet: {path: /healthz, port: http}
+          livenessProbe:
+            httpGet: {path: /healthz, port: http}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: ["ALL"]}
+            readOnlyRootFilesystem: true
+          resources:
+            requests: {cpu: 100m, memory: 64Mi}
+            limits: {cpu: "2", memory: 256Mi}
+          volumeMounts:
+            - name: endpoints
+              mountPath: /etc/velaserve
+              readOnly: true
+            {{- if .Values.conditionDriver.authorizationSecret.name }}
+            - name: authorization
+              mountPath: /run/secrets/velaserve
+              readOnly: true
+            {{- end }}
+      volumes:
+        - name: endpoints
+          configMap:
+            name: velaserve-condition-driver
+        {{- if .Values.conditionDriver.authorizationSecret.name }}
+        - name: authorization
+          secret:
+            secretName: {{ .Values.conditionDriver.authorizationSecret.name | quote }}
+            items:
+              - key: {{ .Values.conditionDriver.authorizationSecret.key | quote }}
+                path: authorization
+        {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: velaserve-condition-driver
+spec:
+  selector:
+    app.kubernetes.io/name: velaserve-condition-driver
+  ports:
+    - name: http
+      port: {{ .Values.conditionDriver.port }}
+      targetPort: http
+{{- end }}

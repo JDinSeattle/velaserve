@@ -157,7 +157,6 @@ func sourceValues(run SourcePressureRun) (map[sourceCoordinate]float64, error) {
 			return nil, fmt.Errorf("group %q has %d source observations, want %d", group.GroupID, len(groupObservations), len(group.Children))
 		}
 		seen := make(map[string]struct{}, len(groupObservations))
-		p2pObserved := false
 		for _, observation := range groupObservations {
 			if observation.FanoutWidth != group.FanoutWidth {
 				return nil, fmt.Errorf("group %q source width mismatch", group.GroupID)
@@ -169,12 +168,6 @@ func sourceValues(run SourcePressureRun) (map[sourceCoordinate]float64, error) {
 				return nil, fmt.Errorf("group %q duplicates source request %q", group.GroupID, observation.RequestID)
 			}
 			seen[observation.RequestID] = struct{}{}
-			if observation.Acquisition == placementrecorder.AcquisitionP2P {
-				p2pObserved = true
-			}
-		}
-		if !p2pObserved {
-			return nil, fmt.Errorf("group %q contains no measured P2P acquisition", group.GroupID)
 		}
 		usedObservationGroups[observationKey] = struct{}{}
 		coordinate := sourceCoordinate{

@@ -55,7 +55,7 @@ case "$(uname -m)" in
 esac
 mkdir -p "$BUILD_OUTPUT"
 cd "$REPOSITORY_ROOT"
-for command_name in simfleet fanoutbench zeroprobe velaserve-gate oracle-replay schema-check condition-controller epp-normalize source-pressure-compile; do
+for command_name in simfleet fanoutbench zeroprobe velaserve-gate oracle-replay schema-check condition-controller condition-driver clock-probe epp-normalize envoy-normalize vllm-normalize p2p-runtime-normalize source-pressure-compile; do
   env \
     CGO_ENABLED=0 \
     GOOS=linux \

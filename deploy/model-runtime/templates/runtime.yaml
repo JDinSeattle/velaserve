@@ -1,0 +1,177 @@
+{{- $modelID := required "model.id is required" .Values.model.id -}}
+{{- $revision := required "model.revision must be an immutable model revision" .Values.model.revision -}}
+{{- $vllmRepository := required "images.vllm.repository is required" .Values.images.vllm.repository -}}
+{{- $vllmDigest := required "images.vllm.digest is required" .Values.images.vllm.digest -}}
+{{- $sidecarRepository := required "images.routingSidecar.repository is required" .Values.images.routingSidecar.repository -}}
+{{- $sidecarDigest := required "images.routingSidecar.digest is required" .Values.images.routingSidecar.digest -}}
+{{- if ne .Values.transport "tcp" }}{{ fail "the Stage-1 runtime adapter currently attests only transport=tcp" }}{{- end }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: velaserve-model-headless
+  labels:
+    app.kubernetes.io/name: velaserve-model
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: false
+  selector:
+    app.kubernetes.io/name: velaserve-model
+  ports:
+    - {name: http, port: {{ .Values.offloading.proxyPort }}, targetPort: proxy, protocol: TCP}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: velaserve-model
+  labels:
+    app.kubernetes.io/name: velaserve-model
+spec:
+  selector:
+    app.kubernetes.io/name: velaserve-model
+  ports:
+    - {name: http, port: {{ .Values.offloading.proxyPort }}, targetPort: proxy, protocol: TCP}
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: velaserve-model
+  labels:
+    app.kubernetes.io/name: velaserve-model
+spec:
+  serviceName: velaserve-model-headless
+  replicas: {{ .Values.replicas }}
+  podManagementPolicy: Parallel
+  updateStrategy:
+    type: OnDelete
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: velaserve-model
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: velaserve-model
+        velaserve.ai/model-revision: {{ $revision | quote }}
+      annotations:
+        velaserve.ai/runtime-contract: "velaserve.vllm-offloading-runtime/v1"
+    spec:
+      terminationGracePeriodSeconds: 120
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  app.kubernetes.io/name: velaserve-model
+              topologyKey: kubernetes.io/hostname
+      tolerations:
+        - key: nvidia.com/gpu
+          operator: Equal
+          value: "true"
+          effect: NoSchedule
+      initContainers:
+        - name: routing-proxy
+          image: {{ printf "%s@%s" $sidecarRepository $sidecarDigest | quote }}
+          imagePullPolicy: IfNotPresent
+          restartPolicy: Always
+          args:
+            - --port={{ .Values.offloading.proxyPort }}
+            - --vllm-port={{ .Values.offloading.enginePort }}
+            - --kv-connector=offloading
+            - --p2p-connector-port={{ .Values.offloading.p2pPort }}
+            - --secure-proxy=false
+          env:
+            - name: POD_IP
+              valueFrom: {fieldRef: {fieldPath: status.podIP}}
+          ports:
+            - {name: proxy, containerPort: {{ .Values.offloading.proxyPort }}, protocol: TCP}
+          readinessProbe:
+            tcpSocket: {port: proxy}
+            periodSeconds: 5
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: ["ALL"]}
+            runAsNonRoot: true
+      containers:
+        - name: vllm
+          image: {{ printf "%s@%s" $vllmRepository $vllmDigest | quote }}
+          imagePullPolicy: IfNotPresent
+          command: ["vllm", "serve"]
+          args:
+            - {{ $modelID | quote }}
+            - --revision={{ $revision }}
+            - --port={{ .Values.offloading.enginePort }}
+            - --tensor-parallel-size=1
+            - --block-size={{ .Values.offloading.blockSize }}
+            - --max-model-len={{ .Values.model.maxModelLength }}
+            - --enable-prefix-caching
+            - --enable-prompt-tokens-details
+            - --enable-request-id-headers
+            - --enable-tokenizer-info-endpoint
+            - --kv-transfer-config
+            - {{ dict "kv_connector" "OffloadingConnector" "kv_role" "kv_both" "kv_connector_extra_config" (dict "spec_name" "TieringOffloadingSpec" "cpu_bytes_to_use" (int64 .Values.offloading.cpuBytesToUse) "offload_prompt_only" false "secondary_tiers" (list (dict "type" "p2p" "host" "$(POD_IP)" "port" (int .Values.offloading.p2pPort)))) | toJson | quote }}
+            - --kv-events-config
+            - {{ dict "enable_kv_cache_events" true "publisher" "zmq" "endpoint" "$(KV_EVENTS_ENDPOINT)" "topic" (printf "kv@$(POD_IP):$(POD_PORT)@%s" $modelID) | toJson | quote }}
+          env:
+            - name: HF_TOKEN
+              valueFrom:
+                secretKeyRef: {name: {{ .Values.hfTokenSecret.name | quote }}, key: {{ .Values.hfTokenSecret.key | quote }}}
+            - name: POD_IP
+              valueFrom: {fieldRef: {fieldPath: status.podIP}}
+            - name: VLLM_P2P_SIDE_CHANNEL_HOST
+              valueFrom: {fieldRef: {fieldPath: status.podIP}}
+            - {name: PYTHONHASHSEED, value: "0"}
+            - {name: KV_EVENTS_ENDPOINT, value: "tcp://*:{{ .Values.offloading.kvEventsPort }}"}
+            - {name: POD_PORT, value: {{ .Values.offloading.proxyPort | quote }}}
+            - {name: UCX_TLS, value: "tcp"}
+            - {name: VELASERVE_VLLM_OBSERVER_VERSION, value: "velaserve.vllm-runtime-observer/v1"}
+            - {name: VLLM_SERVER_DEV_MODE, value: "1"}
+          ports:
+            - {name: engine, containerPort: {{ .Values.offloading.enginePort }}, protocol: TCP}
+            - {name: p2p, containerPort: {{ .Values.offloading.p2pPort }}, protocol: TCP}
+            - {name: kv-events, containerPort: {{ .Values.offloading.kvEventsPort }}, protocol: TCP}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          startupProbe:
+            httpGet: {path: /health, port: engine}
+            periodSeconds: 10
+            failureThreshold: 180
+          readinessProbe:
+            httpGet: {path: /health, port: engine}
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: {path: /health, port: engine}
+            periodSeconds: 15
+          volumeMounts:
+            - {name: shm, mountPath: /dev/shm}
+      volumes:
+        - name: shm
+          emptyDir: {medium: Memory, sizeLimit: {{ .Values.offloading.shmSize | quote }}}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: velaserve-model-engine-isolation
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: velaserve-model
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: velaserve-condition-driver
+      ports:
+        - {protocol: TCP, port: {{ .Values.offloading.enginePort }}}
+    - from:
+        - podSelector:
+            matchLabels:
+              llm-d-router-gateway: {{ .Values.networkPolicy.eppGatewayLabel | quote }}
+      ports:
+        - {protocol: TCP, port: {{ .Values.offloading.proxyPort }}}
+        - {protocol: TCP, port: {{ .Values.offloading.kvEventsPort }}}
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: velaserve-model
+      ports:
+        - {protocol: TCP, port: {{ .Values.offloading.p2pPort }}}

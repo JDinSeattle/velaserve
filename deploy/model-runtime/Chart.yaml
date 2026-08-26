@@ -1,0 +1,6 @@
+apiVersion: v2
+name: velaserve-model-runtime
+description: Frozen vLLM OffloadingConnector and routing-sidecar contract for VelaServe Z0
+type: application
+version: 0.1.0
+appVersion: "b1fbbc2ade51e3826bc92e4733c9c692ee21d42d"

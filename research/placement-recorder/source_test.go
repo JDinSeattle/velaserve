@@ -13,6 +13,8 @@ func TestSourcePressureOmitsUnavailableHardwareCounters(t *testing.T) {
 	start := time.Date(2026, 8, 26, 8, 0, 0, 0, time.UTC)
 	end := start.Add(50 * time.Millisecond)
 	bytesTransferred := uint64(2 << 20)
+	peakPulls := uint32(2)
+	throughput := float64(bytesTransferred) / end.Sub(start).Seconds()
 	record := SourcePressureObservation{
 		SchemaVersion:          SourcePressureSchemaVersion,
 		RunID:                  "run-source-1",
@@ -25,6 +27,8 @@ func TestSourcePressureOmitsUnavailableHardwareCounters(t *testing.T) {
 		TransferBytes:          &bytesTransferred,
 		TransferStartedAt:      &start,
 		TransferCompletedAt:    &end,
+		PeakConcurrentPulls:    &peakPulls,
+		TransferBytesPerSecond: &throughput,
 		LastSiblingTTFTSeconds: 0.4,
 		ObservedAt:             end,
 	}

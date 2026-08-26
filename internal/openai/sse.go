@@ -30,6 +30,8 @@ type StreamResult struct {
 	Latency      time.Duration
 	Text         string
 	OutputTokens uint64
+	PromptTokens uint64
+	CachedTokens *uint64
 	FirstTokenAt *time.Time
 	CompletedAt  time.Time
 }
@@ -96,6 +98,20 @@ func ReadStream(reader io.Reader, options StreamOptions) (StreamResult, error) {
 		}
 		if frame.Usage != nil {
 			result.OutputTokens = frame.Usage.CompletionTokens
+			result.PromptTokens = frame.Usage.PromptTokens
+			if len(frame.Usage.PromptTokensDetails) > 0 {
+				if bytes.Equal(bytes.TrimSpace(frame.Usage.PromptTokensDetails), []byte("null")) {
+					result.CachedTokens = nil
+				} else {
+					var details struct {
+						CachedTokens *uint64 `json:"cached_tokens"`
+					}
+					if err := json.Unmarshal(frame.Usage.PromptTokensDetails, &details); err != nil {
+						return false, fmt.Errorf("decode OpenAI prompt token details: %w", err)
+					}
+					result.CachedTokens = details.CachedTokens
+				}
+			}
 		}
 
 		semanticDelta := false
@@ -175,7 +191,9 @@ type streamFrame struct {
 		Text string `json:"text"`
 	} `json:"choices"`
 	Usage *struct {
-		CompletionTokens uint64 `json:"completion_tokens"`
+		PromptTokens        uint64          `json:"prompt_tokens"`
+		CompletionTokens    uint64          `json:"completion_tokens"`
+		PromptTokensDetails json.RawMessage `json:"prompt_tokens_details"`
 	} `json:"usage"`
 }
 

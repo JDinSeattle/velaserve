@@ -1,0 +1,40 @@
+replicas: 6
+
+model:
+  id: Qwen/Qwen3-8B
+  revision: ""
+  maxModelLength: 32768
+
+images:
+  vllm:
+    repository: ""
+    digest: ""
+  routingSidecar:
+    repository: ""
+    digest: ""
+
+offloading:
+  blockSize: 64
+  cpuBytesToUse: 17179869184
+  p2pPort: 7777
+  kvEventsPort: 5556
+  enginePort: 8200
+  proxyPort: 8000
+  shmSize: 20Gi
+
+transport: tcp
+networkPolicy:
+  eppGatewayLabel: velaserve-epp
+hfTokenSecret:
+  name: llm-d-hf-token
+  key: HF_TOKEN
+
+resources:
+  requests:
+    cpu: 3500m
+    memory: 28Gi
+    nvidia.com/gpu: "1"
+  limits:
+    cpu: "4"
+    memory: 28Gi
+    nvidia.com/gpu: "1"

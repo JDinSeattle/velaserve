@@ -22,6 +22,9 @@ simfleet:
 fanoutbench:
   enabled: false
 
+clockProbe:
+  enabled: true
+
 images:
   velaserve:
     pullPolicy: IfNotPresent

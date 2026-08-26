@@ -5,7 +5,8 @@ activeActiveObservation: false
 model:
   name: velaserve-simulator
   prefixTokens: 4096
-  minCachedTokenDelta: 2048
+  # Real-GPU runs must supply the generated profile-freeze router override.
+  minCachedTokenDelta: null
   metricsURL: http://velaserve-simfleet:8000
   targetPort: 8000
   matchLabels:
@@ -22,7 +23,7 @@ images:
     repository: velaserve-llm-d-router
     tag: git-ab723b898f8598ab6631e9848a4cf28accd9b9ea
     pullPolicy: IfNotPresent
-  envoy: docker.io/envoyproxy/envoy:distroless-v1.33.2
+  envoy: docker.io/envoyproxy/envoy-distroless@sha256:85500e28ed088ec39ff0adc1be3d358a8ad062926aaa62c36b28bde00919e4e8
 
 simfleet:
   enabled: true
@@ -50,6 +51,41 @@ conditionController:
   driverURL: ""
   revision: ""
   port: 8082
+  applyTimeoutSeconds: 900
+
+conditionControlSecret:
+  name: ""
+  key: token
+
+conditionDriver:
+  enabled: false
+  port: 8083
+  model: ""
+  gatewayChatURL: ""
+  loadProfiles: []
+  loadCalibration: {}
+  stabilizationSeconds: 10
+  requestTimeoutSeconds: 30
+  drainTimeoutSeconds: 120
+  drainPollMilliseconds: 500
+  endpoints: []
+  authorizationSecret:
+    name: ""
+    key: authorization
+
+clockProbe:
+  enabled: false
+  port: 8084
+  maxRTTMilliseconds: 250
+  maxOffsetMilliseconds: 100
+  samples: 5
+  resources:
+    requests:
+      cpu: 5m
+      memory: 8Mi
+    limits:
+      cpu: 50m
+      memory: 32Mi
 
 upstream:
   llmDRouterCommit: ab723b898f8598ab6631e9848a4cf28accd9b9ea

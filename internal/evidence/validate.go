@@ -7,11 +7,14 @@ import (
 	"fmt"
 	"math"
 	"strings"
+	"time"
 )
 
 var registeredZ0Widths = map[uint32]struct{}{2: {}, 4: {}, 8: {}, 16: {}}
 var registeredBenchmarkWidths = map[uint32]struct{}{1: {}, 2: {}, 4: {}, 8: {}, 16: {}}
 var registeredSkews = map[uint32]struct{}{0: {}, 1: {}, 5: {}, 20: {}}
+
+const timestampMetricToleranceSeconds = 1e-6
 
 func ValidatePlacementEvent(event PlacementEvent) error {
 	if event.SchemaVersion != SchemaVersion {
@@ -47,11 +50,45 @@ func ValidatePlacementEvent(event PlacementEvent) error {
 	if err := validateSnapshot(event.Snapshot); err != nil {
 		return fmt.Errorf("snapshot: %w", err)
 	}
+	if !event.Snapshot.ObservedAt.Equal(event.ObservedAt) {
+		return fmt.Errorf("snapshot observation time must equal placement observation time")
+	}
 	if err := validateEndpointRef(event.Target); err != nil {
 		return fmt.Errorf("target: %w", err)
 	}
 	if !snapshotContains(event.Snapshot, event.Target) {
 		return fmt.Errorf("target: endpoint %q is absent from snapshot", event.Target.ID)
+	}
+	seenScores := make(map[EndpointRef]struct{}, len(event.ScoredCandidates))
+	for index, scored := range event.ScoredCandidates {
+		if err := validateEndpointRef(scored.Endpoint); err != nil || !snapshotContains(event.Snapshot, scored.Endpoint) || math.IsNaN(scored.Score) || math.IsInf(scored.Score, 0) {
+			return fmt.Errorf("scored_candidates[%d]: invalid endpoint or score", index)
+		}
+		if _, exists := seenScores[scored.Endpoint]; exists {
+			return fmt.Errorf("scored_candidates[%d]: duplicate endpoint", index)
+		}
+		seenScores[scored.Endpoint] = struct{}{}
+	}
+	if event.SelectedP2PSource != nil {
+		if err := validateEndpointRef(event.SelectedP2PSource.Source); err != nil || !snapshotContains(event.Snapshot, event.SelectedP2PSource.Source) || event.SelectedP2PSource.CachedTokens == 0 || strings.TrimSpace(event.SelectedP2PSourceHost) == "" || event.SelectedP2PSourcePort == 0 {
+			return fmt.Errorf("selected_p2p_source: invalid or absent from snapshot")
+		}
+		if event.SelectedP2PSource.Source == event.Target {
+			return fmt.Errorf("selected_p2p_source: cannot equal the compute target")
+		}
+		targetState, _ := snapshotEndpoint(event.Snapshot, event.Target)
+		listed := false
+		for _, source := range targetState.P2PSources {
+			if source == *event.SelectedP2PSource {
+				listed = true
+				break
+			}
+		}
+		if !listed {
+			return fmt.Errorf("selected_p2p_source: not advertised by the compute target")
+		}
+	} else if event.SelectedP2PSourceHost != "" || event.SelectedP2PSourcePort != 0 {
+		return fmt.Errorf("selected_p2p_source endpoint cannot exist without a selected source")
 	}
 	return nil
 }
@@ -95,7 +132,20 @@ func ValidateGroupResult(result GroupResult) error {
 			return fmt.Errorf("condition: applied load/cache state does not match benchmark cell")
 		}
 		if strings.TrimSpace(condition.ControllerRevision) == "" || !isLowerHexSHA256(condition.StateSHA256) || condition.AppliedAt.IsZero() {
-			return fmt.Errorf("condition: controller revision, state SHA-256, and applied time are required")
+			return fmt.Errorf("condition: controller revision, state SHA-256, and valid apply time are required")
+		}
+		conditionFailure := strings.TrimSpace(result.ConditionFailure)
+		if condition.FinalizedAt == nil {
+			if conditionFailure == "" || result.Outcome != OutcomeFailure {
+				return fmt.Errorf("condition: an unfinalized applied condition requires an explicit failed-group finalization error")
+			}
+		} else {
+			if condition.FinalizedAt.IsZero() || condition.FinalizedAt.Before(condition.AppliedAt) {
+				return fmt.Errorf("condition: valid finalize time is required")
+			}
+			if conditionFailure != "" {
+				return fmt.Errorf("condition: a finalized condition cannot include condition_failure")
+			}
 		}
 		if err := ValidateConditionObservedState(condition.ObservedState, condition.LoadRegime, condition.CacheState, condition.PrefixSourceCount); err != nil {
 			return fmt.Errorf("condition: %w", err)
@@ -106,6 +156,8 @@ func ValidateGroupResult(result GroupResult) error {
 		if condition.PrefixSourceCount != 0 && condition.PrefixSourceCount != 1 && condition.PrefixSourceCount != 2 && condition.PrefixSourceCount != 4 {
 			return fmt.Errorf("condition: prefix source count is not registered")
 		}
+	} else if strings.TrimSpace(result.ConditionFailure) != "" {
+		return fmt.Errorf("condition_failure requires the retained applied condition")
 	}
 	if err := validateOutcome("outcome", result.Outcome, result.Failure); err != nil {
 		return err
@@ -114,6 +166,11 @@ func ValidateGroupResult(result GroupResult) error {
 		return fmt.Errorf("children: got %d, want fanout_width %d", len(result.Children), result.FanoutWidth)
 	}
 	seen := make(map[string]struct{}, len(result.Children))
+	var earliestDispatch, latestCompletion *time.Time
+	var observedSlowestTTFT float64
+	recomputedPrefixTokens := uint64(0)
+	recomputedMeasured := result.Cell.PrefixTokens > 0
+	successfulChildren := 0
 	for index, child := range result.Children {
 		if err := requireID(fmt.Sprintf("children[%d].request_id", index), child.RequestID); err != nil {
 			return err
@@ -136,30 +193,116 @@ func ValidateGroupResult(result GroupResult) error {
 		if child.TTFTSeconds > child.LatencySeconds {
 			return fmt.Errorf("children[%d].ttft_seconds: exceeds latency_seconds", index)
 		}
+		if child.CachedTokens != nil && (child.PromptTokens == 0 || *child.CachedTokens > child.PromptTokens) {
+			return fmt.Errorf("children[%d].cached_tokens: missing prompt-token count or exceeds it", index)
+		}
 		if err := validateOutcome(fmt.Sprintf("children[%d].outcome", index), child.Outcome, child.Failure); err != nil {
 			return err
 		}
+		if result.Outcome == OutcomeSuccess && child.Outcome != OutcomeSuccess {
+			return fmt.Errorf("children[%d].outcome: successful group contains a non-success child", index)
+		}
+		if child.Outcome == OutcomeSuccess {
+			successfulChildren++
+			if child.CachedTokens == nil || child.PromptTokens == 0 {
+				recomputedMeasured = false
+			} else {
+				cachedSharedTokens := min(*child.CachedTokens, result.Cell.PrefixTokens)
+				recomputed := result.Cell.PrefixTokens - cachedSharedTokens
+				if ^uint64(0)-recomputedPrefixTokens < recomputed {
+					recomputedMeasured = false
+				} else {
+					recomputedPrefixTokens += recomputed
+				}
+			}
+		}
+		if child.CompletedAt == nil || child.CompletedAt.IsZero() {
+			return fmt.Errorf("children[%d]: valid dispatch and completion timestamps are required", index)
+		}
+		if latestCompletion == nil || child.CompletedAt.After(*latestCompletion) {
+			latestCompletion = child.CompletedAt
+		}
+		if child.DispatchedAt == nil {
+			if child.Outcome == OutcomeSuccess || child.FirstTokenAt != nil || !secondsEqual(child.TTFTSeconds, 0) || !secondsEqual(child.LatencySeconds, 0) {
+				return fmt.Errorf("children[%d]: pre-dispatch terminal child must be failed or cancelled with zero timing", index)
+			}
+			continue
+		}
+		if child.DispatchedAt.IsZero() || child.CompletedAt.Before(*child.DispatchedAt) {
+			return fmt.Errorf("children[%d]: valid dispatch and completion timestamps are required", index)
+		}
+		if child.Outcome == OutcomeSuccess && (child.FirstTokenAt == nil || child.FirstTokenAt.IsZero()) {
+			return fmt.Errorf("children[%d]: successful child requires first-token timestamp", index)
+		}
+		if child.FirstTokenAt != nil {
+			if child.FirstTokenAt.IsZero() || child.FirstTokenAt.Before(*child.DispatchedAt) || child.FirstTokenAt.After(*child.CompletedAt) {
+				return fmt.Errorf("children[%d]: first-token timestamp is outside execution interval", index)
+			}
+			observedTTFT := child.FirstTokenAt.Sub(*child.DispatchedAt).Seconds()
+			if !secondsEqual(child.TTFTSeconds, observedTTFT) {
+				return fmt.Errorf("children[%d].ttft_seconds does not match timestamps", index)
+			}
+		} else if !secondsEqual(child.TTFTSeconds, 0) {
+			return fmt.Errorf("children[%d].ttft_seconds has no first-token timestamp", index)
+		}
+		observedLatency := child.CompletedAt.Sub(*child.DispatchedAt).Seconds()
+		if !secondsEqual(child.LatencySeconds, observedLatency) {
+			return fmt.Errorf("children[%d].latency_seconds does not match timestamps", index)
+		}
+		if earliestDispatch == nil || child.DispatchedAt.Before(*earliestDispatch) {
+			earliestDispatch = child.DispatchedAt
+		}
+		if child.TTFTSeconds > observedSlowestTTFT {
+			observedSlowestTTFT = child.TTFTSeconds
+		}
+	}
+	if recomputedMeasured && successfulChildren > 0 {
+		if result.RecomputedPrefixTokens == nil || *result.RecomputedPrefixTokens != recomputedPrefixTokens {
+			return fmt.Errorf("recomputed_prefix_tokens does not match successful child cache readbacks")
+		}
+	} else if result.RecomputedPrefixTokens != nil {
+		return fmt.Errorf("recomputed_prefix_tokens is present without complete successful child cache readbacks")
+	}
+	if result.Condition != nil && earliestDispatch != nil && result.Condition.AppliedAt.After(*earliestDispatch) {
+		return fmt.Errorf("condition: applied time must precede every child dispatch")
+	}
+	if result.Condition != nil && result.Condition.FinalizedAt != nil && latestCompletion != nil && result.Condition.FinalizedAt.Before(*latestCompletion) {
+		return fmt.Errorf("condition: finalized time must follow every child completion")
+	}
+	if !secondsEqual(result.SlowestChildTTFTSeconds, observedSlowestTTFT) {
+		return fmt.Errorf("slowest_child_ttft_seconds does not match children")
+	}
+	observedMakespan := 0.0
+	if earliestDispatch != nil && latestCompletion.After(*earliestDispatch) {
+		observedMakespan = latestCompletion.Sub(*earliestDispatch).Seconds()
+	}
+	if !secondsEqual(result.MakespanSeconds, observedMakespan) {
+		return fmt.Errorf("makespan_seconds does not match timestamps")
 	}
 	return nil
 }
 
+func secondsEqual(recorded, observed float64) bool {
+	return math.Abs(recorded-observed) <= timestampMetricToleranceSeconds
+}
+
 func ValidateConditionObservedState(state ConditionObservedState, load LoadRegime, cacheState string, prefixSourceCount uint32) error {
-	if !finiteNonNegativeValue(state.OfferedLoadQPS) || !finiteNonNegativeValue(state.AchievedLoadQPS) || !finiteNonNegativeValue(state.SaturationQPS) || state.SaturationQPS == 0 || strings.TrimSpace(state.MeasurementSource) == "" {
+	if !finiteNonNegativeValue(state.OfferedLoadQPS) || !finiteNonNegativeValue(state.AchievedLoadQPS) || !finiteNonNegativeValue(state.SaturationQPS) || !finiteNonNegativeValue(state.OrdinaryTrafficMeanLatencySeconds) || state.SaturationQPS == 0 || state.DroppedLoadRequests != 0 || !isLowerHexSHA256(state.LoadProfileSHA256) || !isLowerHexSHA256(state.LoadProfilesSHA256) || !isLowerHexSHA256(state.LoadCalibrationSHA256) || state.MeasurementSource != "load-calibration:"+state.LoadCalibrationSHA256 {
 		return fmt.Errorf("observed load rates and measurement source are invalid")
 	}
 	offeredFraction := state.OfferedLoadQPS / state.SaturationQPS
 	achievedFraction := state.AchievedLoadQPS / state.SaturationQPS
 	switch load {
 	case LoadIdle:
-		if offeredFraction > 0.05 || achievedFraction > 0.05 {
+		if offeredFraction > 0.05 || achievedFraction > 0.05 || state.OrdinaryTrafficMeanLatencySeconds != 0 {
 			return fmt.Errorf("idle offered or achieved load exceeds 5 percent of saturation")
 		}
 	case LoadModerate:
-		if offeredFraction < 0.40 || offeredFraction > 0.60 || achievedFraction < 0.40 || achievedFraction > 0.60 {
+		if offeredFraction < 0.40 || offeredFraction > 0.60 || achievedFraction < 0.40 || achievedFraction > 0.60 || state.OrdinaryTrafficMeanLatencySeconds <= 0 {
 			return fmt.Errorf("moderate offered or achieved load is outside 40 to 60 percent of saturation")
 		}
 	case LoadNearSaturation:
-		if offeredFraction < 0.85 || offeredFraction > 0.95 || achievedFraction < 0.85 || achievedFraction > 0.95 {
+		if offeredFraction < 0.85 || offeredFraction > 0.95 || achievedFraction < 0.85 || achievedFraction > 0.95 || state.OrdinaryTrafficMeanLatencySeconds <= 0 {
 			return fmt.Errorf("near-saturation offered or achieved load is outside 85 to 95 percent of saturation")
 		}
 	default:
@@ -173,6 +316,24 @@ func ValidateConditionObservedState(state ConditionObservedState, load LoadRegim
 	if err != nil {
 		return fmt.Errorf("prefix-source endpoint IDs: %w", err)
 	}
+	drained, err := uniqueConditionIDs(state.DrainedEndpointIDs)
+	if err != nil || len(drained) == 0 || state.DrainStableSamples < 2 {
+		return fmt.Errorf("drained endpoint IDs and two stable idle samples are required")
+	}
+	ownerOrder, err := uniqueConditionIDs(state.OwnerEndpointOrder)
+	if err != nil || len(ownerOrder) != len(drained) {
+		return fmt.Errorf("owner endpoint order must contain every drained endpoint exactly once")
+	}
+	for id := range ownerOrder {
+		if _, exists := drained[id]; !exists {
+			return fmt.Errorf("owner endpoint %q was not observed drained", id)
+		}
+	}
+	for id := range cached {
+		if _, exists := drained[id]; !exists {
+			return fmt.Errorf("cached endpoint %q was not observed drained", id)
+		}
+	}
 	if prefixSourceCount != 0 {
 		if prefixSourceCount != 1 && prefixSourceCount != 2 && prefixSourceCount != 4 {
 			return fmt.Errorf("prefix source count is not registered")
@@ -185,6 +346,9 @@ func ValidateConditionObservedState(state ConditionObservedState, load LoadRegim
 				return fmt.Errorf("Z0-C cached and prefix-source endpoint sets differ")
 			}
 		}
+		if !conditionIDPrefix(state.CachedEndpointIDs, state.OwnerEndpointOrder) || !conditionIDPrefix(state.PrefixSourceEndpointIDs, state.OwnerEndpointOrder) {
+			return fmt.Errorf("Z0-C source identities must be the nested prefix of the attested owner rotation")
+		}
 		return nil
 	}
 	if len(sources) != 0 {
@@ -196,11 +360,11 @@ func ValidateConditionObservedState(state ConditionObservedState, load LoadRegim
 			return fmt.Errorf("cold cache state contains cached endpoints")
 		}
 	case "warm-owner":
-		if len(cached) != 1 {
+		if len(cached) != 1 || !conditionIDPrefix(state.CachedEndpointIDs, state.OwnerEndpointOrder) {
 			return fmt.Errorf("warm-owner cache state requires exactly one cached endpoint")
 		}
 	case "distributed-warm":
-		if len(cached) < 2 {
+		if len(cached) < 2 || len(cached) != len(ownerOrder) || !conditionIDPrefix(state.CachedEndpointIDs, state.OwnerEndpointOrder) {
 			return fmt.Errorf("distributed-warm cache state requires at least two cached endpoints")
 		}
 	default:
@@ -215,10 +379,11 @@ func conditionStateSHA256(condition ConditionAttestation) string {
 		LoadRegime        LoadRegime             `json:"load_regime"`
 		CacheState        string                 `json:"cache_state"`
 		PrefixSourceCount uint32                 `json:"prefix_source_count,omitempty"`
+		OwnerRotation     uint32                 `json:"owner_rotation"`
 		ObservedState     ConditionObservedState `json:"observed_state"`
 	}{
 		SchemaVersion: "velaserve.applied-condition/v1", LoadRegime: condition.LoadRegime,
-		CacheState: condition.CacheState, PrefixSourceCount: condition.PrefixSourceCount, ObservedState: condition.ObservedState,
+		CacheState: condition.CacheState, PrefixSourceCount: condition.PrefixSourceCount, OwnerRotation: condition.OwnerRotation, ObservedState: condition.ObservedState,
 	}
 	encoded, err := json.Marshal(state)
 	if err != nil {
@@ -240,6 +405,18 @@ func uniqueConditionIDs(values []string) (map[string]struct{}, error) {
 		result[value] = struct{}{}
 	}
 	return result, nil
+}
+
+func conditionIDPrefix(values, order []string) bool {
+	if len(values) > len(order) {
+		return false
+	}
+	for index := range values {
+		if values[index] != order[index] {
+			return false
+		}
+	}
+	return true
 }
 
 func finiteNonNegativeValue(value float64) bool {
@@ -319,12 +496,17 @@ func validateSnapshot(snapshot EndpointSnapshot) error {
 }
 
 func snapshotContains(snapshot EndpointSnapshot, target EndpointRef) bool {
+	_, exists := snapshotEndpoint(snapshot, target)
+	return exists
+}
+
+func snapshotEndpoint(snapshot EndpointSnapshot, target EndpointRef) (EndpointState, bool) {
 	for _, endpoint := range snapshot.Endpoints {
 		if endpoint.Ref == target {
-			return true
+			return endpoint, true
 		}
 	}
-	return false
+	return EndpointState{}, false
 }
 
 func validateEndpointRef(ref EndpointRef) error {

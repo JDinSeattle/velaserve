@@ -1,0 +1,60 @@
+{{- include "velaserve.validate" . -}}
+{{- if .Values.clockProbe.enabled }}
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: velaserve-clock-probe
+  labels:
+    {{- include "velaserve.labels" . | nindent 4 }}
+    app.kubernetes.io/name: velaserve-clock-probe
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: velaserve-clock-probe
+  template:
+    metadata:
+      labels:
+        {{- include "velaserve.labels" . | nindent 8 }}
+        app.kubernetes.io/name: velaserve-clock-probe
+    spec:
+      automountServiceAccountToken: false
+      tolerations:
+        - operator: Exists
+      nodeSelector:
+        kubernetes.io/os: linux
+        kubernetes.io/arch: amd64
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: clock-probe
+          image: {{ include "velaserve.image" . }}
+          imagePullPolicy: {{ .Values.images.velaserve.pullPolicy }}
+          command: ["/app/clock-probe", "serve", "--listen=:{{ .Values.clockProbe.port }}"]
+          ports:
+            - name: http
+              containerPort: {{ .Values.clockProbe.port }}
+              protocol: TCP
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 2
+            timeoutSeconds: 1
+            failureThreshold: 15
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 1
+            failureThreshold: 3
+          resources:
+            {{- toYaml .Values.clockProbe.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+{{- end }}

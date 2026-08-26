@@ -1,12 +1,12 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/JDinSeattle/velaserve/schemas/preflight-binding-v1.json",
-  "title": "VelaServe real-GPU preflight binding v1",
+  "$id": "https://github.com/JDinSeattle/velaserve/schemas/preflight-binding-v3.json",
+  "title": "VelaServe real-GPU preflight binding v3",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "repository_commit", "aws_account_id", "aws_region", "cluster_arn", "namespace", "endpoint", "gateway_uid", "http_route_uid", "preregistration_sha256", "calibration_sha256", "active_arm", "transport", "model", "epp", "condition_controller", "nodes", "observed_at"],
+  "required": ["schema_version", "repository_commit", "aws_account_id", "aws_region", "cluster_arn", "namespace", "endpoint", "gateway_uid", "http_route_uid", "gateway_data_plane", "gateway_controller", "preregistration_sha256", "calibration_sha256", "benchmark_profile_sha256", "profile_calibration_sha256", "routing_sha256", "router_config_sha256", "router_config_invariant_sha256", "zeroing_contract_sha256", "active_arm", "transport", "model", "epp", "condition_controller", "condition_driver", "nodes", "clock_attestation", "observed_at"],
   "properties": {
-    "schema_version": {"const": "velaserve.preflight-binding/v1"},
+    "schema_version": {"const": "velaserve.preflight-binding/v3"},
     "repository_commit": {"$ref": "#/$defs/commit"},
     "aws_account_id": {"type": "string", "pattern": "^[0-9]{12}$"},
     "aws_region": {"type": "string", "minLength": 1},
@@ -15,39 +15,64 @@
     "endpoint": {"type": "string", "format": "uri", "pattern": "^https?://"},
     "gateway_uid": {"type": "string", "minLength": 1},
     "http_route_uid": {"type": "string", "minLength": 1},
+    "gateway_data_plane": {"$ref": "#/$defs/gatewayRuntime"},
+    "gateway_controller": {"$ref": "#/$defs/gatewayRuntime"},
     "preregistration_sha256": {"$ref": "#/$defs/sha256"},
     "calibration_sha256": {"$ref": "#/$defs/sha256"},
+    "benchmark_profile_sha256": {"$ref": "#/$defs/sha256"},
+    "profile_calibration_sha256": {"$ref": "#/$defs/sha256"},
+    "routing_sha256": {"$ref": "#/$defs/sha256"},
+    "router_config_sha256": {"$ref": "#/$defs/sha256"},
+    "router_config_invariant_sha256": {"$ref": "#/$defs/sha256"},
+    "zeroing_contract_sha256": {"$ref": "#/$defs/sha256"},
     "active_arm": {"enum": ["arm-a-affinity-p2p", "arm-b-load-aware-p2p"]},
     "transport": {"enum": ["tcp", "efa"]},
     "model": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["selector", "container", "workload", "id", "revision", "image", "minimum_replicas", "maximum_replicas", "pods"],
+      "required": ["release", "selector", "container", "workload", "service", "service_uid", "service_spec_sha256", "id", "revision", "image", "image_provenance", "sidecar_container", "sidecar_image", "sidecar_provenance", "minimum_replicas", "maximum_replicas", "block_size", "cpu_offload_bytes", "engine_port", "proxy_port", "p2p_port", "kv_events_port", "runtime_contract_sha256", "network_policy_sha256", "developer_api_enabled", "reset_external", "spec_sha256", "pods", "sidecar_pods", "tokenizer_verified_pod_uids"],
       "properties": {
-        "selector": {"type": "string", "minLength": 1}, "container": {"type": "string", "minLength": 1}, "workload": {"type": "string", "minLength": 1}, "id": {"type": "string", "minLength": 1},
-        "revision": {"type": "string", "pattern": "^[0-9a-f]{40,64}$"}, "image": {"$ref": "#/$defs/image"},
+        "release": {"type": "string", "minLength": 1}, "selector": {"type": "string", "minLength": 1}, "container": {"type": "string", "minLength": 1}, "workload": {"type": "string", "minLength": 1}, "service": {"type": "string", "minLength": 1}, "service_uid": {"type": "string", "minLength": 1}, "service_spec_sha256": {"$ref": "#/$defs/sha256"}, "id": {"type": "string", "minLength": 1},
+        "revision": {"type": "string", "pattern": "^[0-9a-f]{40,64}$"}, "image": {"$ref": "#/$defs/image"}, "image_provenance": {"$ref": "#/$defs/imageProvenance"}, "sidecar_container": {"type": "string", "minLength": 1}, "sidecar_image": {"$ref": "#/$defs/image"}, "sidecar_provenance": {"$ref": "#/$defs/imageProvenance"},
         "minimum_replicas": {"type": "integer", "minimum": 6, "maximum": 8}, "maximum_replicas": {"type": "integer", "minimum": 6, "maximum": 8},
-        "pods": {"type": "array", "minItems": 6, "maxItems": 8, "items": {"$ref": "#/$defs/pod"}}
+        "block_size": {"const": 64}, "cpu_offload_bytes": {"type": "integer", "minimum": 1}, "engine_port": {"const": 8200}, "proxy_port": {"const": 8000}, "p2p_port": {"const": 7777}, "kv_events_port": {"const": 5556},
+        "runtime_contract_sha256": {"$ref": "#/$defs/sha256"}, "network_policy_sha256": {"$ref": "#/$defs/sha256"}, "developer_api_enabled": {"const": true}, "reset_external": {"const": true}, "spec_sha256": {"$ref": "#/$defs/sha256"},
+        "pods": {"type": "array", "minItems": 6, "maxItems": 8, "items": {"$ref": "#/$defs/pod"}},
+        "sidecar_pods": {"type": "array", "minItems": 6, "maxItems": 8, "items": {"$ref": "#/$defs/pod"}},
+        "tokenizer_verified_pod_uids": {"type": "array", "minItems": 6, "maxItems": 8, "uniqueItems": true, "items": {"type": "string", "minLength": 1}}
       }
     },
     "epp": {
       "type": "object", "additionalProperties": false,
-      "required": ["selector", "container", "image", "replicas", "pods"],
-      "properties": {"selector": {"type": "string", "minLength": 1}, "container": {"type": "string", "minLength": 1}, "image": {"$ref": "#/$defs/image"}, "replicas": {"enum": [1, 2]}, "pods": {"type": "array", "minItems": 1, "maxItems": 2, "items": {"$ref": "#/$defs/pod"}}}
+      "required": ["selector", "container", "image", "image_provenance", "proxy_container", "proxy_image", "proxy_pods", "replicas", "min_cached_token_delta", "spec_sha256", "pods"],
+      "properties": {"selector": {"type": "string", "minLength": 1}, "container": {"type": "string", "minLength": 1}, "image": {"$ref": "#/$defs/image"}, "image_provenance": {"$ref": "#/$defs/imageProvenance"}, "proxy_container": {"type": "string", "minLength": 1}, "proxy_image": {"$ref": "#/$defs/image"}, "proxy_pods": {"type": "array", "minItems": 1, "maxItems": 2, "items": {"$ref": "#/$defs/pod"}}, "replicas": {"enum": [1, 2]}, "min_cached_token_delta": {"type": "integer", "minimum": 1}, "spec_sha256": {"$ref": "#/$defs/sha256"}, "pods": {"type": "array", "minItems": 1, "maxItems": 2, "items": {"$ref": "#/$defs/pod"}}}
     },
     "condition_controller": {
       "type": "object", "additionalProperties": false,
-      "required": ["selector", "container", "image", "revision", "pods"],
-      "properties": {"selector": {"type": "string", "minLength": 1}, "container": {"type": "string", "minLength": 1}, "image": {"$ref": "#/$defs/image"}, "revision": {"$ref": "#/$defs/commit"}, "pods": {"type": "array", "minItems": 1, "maxItems": 1, "items": {"$ref": "#/$defs/pod"}}}
+      "required": ["selector", "container", "image", "image_provenance", "revision", "apply_timeout_seconds", "spec_sha256", "pods"],
+      "properties": {"selector": {"type": "string", "minLength": 1}, "container": {"type": "string", "minLength": 1}, "image": {"$ref": "#/$defs/image"}, "image_provenance": {"$ref": "#/$defs/repositoryImageProvenance"}, "revision": {"$ref": "#/$defs/commit"}, "apply_timeout_seconds": {"type": "integer", "minimum": 600, "maximum": 3600}, "spec_sha256": {"$ref": "#/$defs/sha256"}, "pods": {"type": "array", "minItems": 1, "maxItems": 1, "items": {"$ref": "#/$defs/pod"}}}
+    },
+    "condition_driver": {
+      "type": "object", "additionalProperties": false,
+      "required": ["endpoint", "gateway_chat_url", "selector", "container", "image", "image_provenance", "spec_sha256", "config_sha256", "load_profiles_sha256", "load_calibration_sha256", "control_secret_sha256", "drain_timeout_seconds", "drain_poll_milliseconds", "endpoints", "pods"],
+      "properties": {"endpoint": {"type": "string", "format": "uri", "pattern": "^https?://"}, "gateway_chat_url": {"type": "string", "format": "uri", "pattern": "^https?://"}, "selector": {"type": "string", "minLength": 1}, "container": {"type": "string", "minLength": 1}, "image": {"$ref": "#/$defs/image"}, "image_provenance": {"$ref": "#/$defs/repositoryImageProvenance"}, "spec_sha256": {"$ref": "#/$defs/sha256"}, "config_sha256": {"$ref": "#/$defs/sha256"}, "load_profiles_sha256": {"$ref": "#/$defs/sha256"}, "load_calibration_sha256": {"$ref": "#/$defs/sha256"}, "control_secret_sha256": {"$ref": "#/$defs/sha256"}, "drain_timeout_seconds": {"type": "integer", "minimum": 30, "maximum": 600}, "drain_poll_milliseconds": {"type": "integer", "minimum": 50, "maximum": 5000}, "endpoints": {"type": "array", "minItems": 6, "maxItems": 8, "items": {"$ref": "#/$defs/conditionEndpoint"}}, "pods": {"type": "array", "minItems": 1, "maxItems": 1, "items": {"$ref": "#/$defs/pod"}}}
     },
     "nodes": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/node"}},
+    "clock_attestation": {"$ref": "#/$defs/clockAttestation"},
     "observed_at": {"type": "string", "format": "date-time"}
   },
   "$defs": {
     "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
     "commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
     "image": {"type": "string", "pattern": "^.+@sha256:[0-9a-f]{64}$"},
-    "pod": {"type": "object", "additionalProperties": false, "required": ["name", "uid", "image", "restart_count"], "properties": {"name": {"type": "string", "minLength": 1}, "uid": {"type": "string", "minLength": 1}, "image": {"$ref": "#/$defs/image"}, "restart_count": {"const": 0}}},
-    "node": {"type": "object", "additionalProperties": false, "required": ["name", "uid", "instance_type", "gpu_allocatable"], "properties": {"name": {"type": "string", "minLength": 1}, "uid": {"type": "string", "minLength": 1}, "instance_type": {"type": "string", "minLength": 1}, "gpu_allocatable": {"type": "integer", "minimum": 1}}}
+    "imageProvenance": {"type": "object", "additionalProperties": false, "required": ["component", "upstream_commit", "patch_sha256s", "dirty"], "properties": {"component": {"enum": ["vllm", "epp", "routing-sidecar"]}, "upstream_commit": {"$ref": "#/$defs/commit"}, "patch_sha256s": {"type": "array", "minItems": 1, "maxItems": 2, "uniqueItems": true, "items": {"$ref": "#/$defs/sha256"}}, "dirty": {"const": false}}},
+    "repositoryImageProvenance": {"type": "object", "additionalProperties": false, "required": ["component", "repository_commit", "dirty"], "properties": {"component": {"const": "velaserve"}, "repository_commit": {"$ref": "#/$defs/commit"}, "dirty": {"const": false}}},
+    "pod": {"type": "object", "additionalProperties": false, "required": ["name", "uid", "image", "restart_count"], "properties": {"name": {"type": "string", "minLength": 1}, "uid": {"type": "string", "minLength": 1}, "image": {"$ref": "#/$defs/image"}, "node_name": {"type": "string", "minLength": 1}, "restart_count": {"const": 0}}},
+    "conditionEndpoint": {"type": "object", "additionalProperties": false, "required": ["id", "pod_uid", "dns_name", "chat_url", "reset_url", "metrics_url"], "properties": {"id": {"type": "string", "minLength": 1}, "pod_uid": {"type": "string", "minLength": 1}, "dns_name": {"type": "string", "minLength": 1}, "chat_url": {"type": "string", "format": "uri", "pattern": "^http://"}, "reset_url": {"type": "string", "format": "uri", "pattern": "^http://"}, "metrics_url": {"type": "string", "format": "uri", "pattern": "^http://"}}},
+    "gatewayRuntime": {"type": "object", "additionalProperties": false, "required": ["namespace", "selector", "container", "image", "spec_sha256", "pods"], "properties": {"namespace": {"type": "string", "minLength": 1}, "selector": {"type": "string", "minLength": 1}, "container": {"type": "string", "minLength": 1}, "image": {"$ref": "#/$defs/image"}, "spec_sha256": {"$ref": "#/$defs/sha256"}, "pods": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/pod"}}}},
+    "node": {"type": "object", "additionalProperties": false, "required": ["name", "uid", "instance_type", "gpu_model", "gpu_allocatable", "architecture", "os_image", "kernel_version", "container_runtime_version", "kubelet_version", "gpu_driver_version"], "properties": {"name": {"type": "string", "minLength": 1}, "uid": {"type": "string", "minLength": 1}, "instance_type": {"type": "string", "minLength": 1}, "gpu_model": {"type": "string", "minLength": 1}, "gpu_allocatable": {"type": "integer", "minimum": 1}, "architecture": {"type": "string", "minLength": 1}, "os_image": {"type": "string", "minLength": 1}, "kernel_version": {"type": "string", "minLength": 1}, "container_runtime_version": {"type": "string", "minLength": 1}, "kubelet_version": {"type": "string", "minLength": 1}, "gpu_driver_version": {"type": "string", "minLength": 1}}},
+    "clockObservation": {"type": "object", "additionalProperties": false, "required": ["schema_version", "samples", "best_rtt_nanoseconds", "offset_minimum_nanoseconds", "offset_maximum_nanoseconds", "maximum_rtt_nanoseconds", "maximum_offset_nanoseconds", "observed_at"], "properties": {"schema_version": {"const": "velaserve.clock-observation/v1"}, "samples": {"const": 5}, "best_rtt_nanoseconds": {"type": "integer", "minimum": 1, "maximum": 250000000}, "offset_minimum_nanoseconds": {"type": "integer", "minimum": -100000000, "maximum": 100000000}, "offset_maximum_nanoseconds": {"type": "integer", "minimum": -100000000, "maximum": 100000000}, "maximum_rtt_nanoseconds": {"const": 250000000}, "maximum_offset_nanoseconds": {"const": 100000000}, "observed_at": {"type": "string", "format": "date-time"}}},
+    "clockProbe": {"type": "object", "additionalProperties": false, "required": ["node_name", "node_uid", "pod", "observation"], "properties": {"node_name": {"type": "string", "minLength": 1}, "node_uid": {"type": "string", "minLength": 1}, "pod": {"$ref": "#/$defs/pod"}, "observation": {"$ref": "#/$defs/clockObservation"}}},
+    "clockAttestation": {"type": "object", "additionalProperties": false, "required": ["image", "samples", "maximum_rtt_nanoseconds", "maximum_offset_nanoseconds", "probes"], "properties": {"image": {"$ref": "#/$defs/image"}, "samples": {"const": 5}, "maximum_rtt_nanoseconds": {"const": 250000000}, "maximum_offset_nanoseconds": {"const": 100000000}, "probes": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"$ref": "#/$defs/clockProbe"}}}}
   }
 }

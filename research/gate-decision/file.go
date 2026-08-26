@@ -52,29 +52,6 @@ func GenerateKeyFiles(privatePath, publicPath string) error {
 	return nil
 }
 
-func SignDecisionFile(decisionPath, privatePath, outputPath string, bindings DecisionBindings) error {
-	decision, err := decodeJSONFile[evidence.GateDecision](decisionPath)
-	if err != nil {
-		return fmt.Errorf("read gate decision: %w", err)
-	}
-	if err := verifyBindings(decision, bindings); err != nil {
-		return err
-	}
-	privateBytes, err := readBase64Key(privatePath, ed25519.PrivateKeySize)
-	if err != nil {
-		return fmt.Errorf("read private key: %w", err)
-	}
-	signed, err := Sign(decision, ed25519.PrivateKey(privateBytes))
-	if err != nil {
-		return err
-	}
-	encoded, err := json.MarshalIndent(signed, "", "  ")
-	if err != nil {
-		return fmt.Errorf("encode signed gate decision: %w", err)
-	}
-	return writeExclusive(outputPath, append(encoded, '\n'), 0o644)
-}
-
 func VerifyDecisionFile(signedPath, publicPath string, bindings DecisionBindings) error {
 	signed, err := decodeJSONFile[SignedDecision](signedPath)
 	if err != nil {

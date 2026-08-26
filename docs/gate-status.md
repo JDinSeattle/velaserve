@@ -16,7 +16,7 @@ No production placement or source-pressure coordination code exists. The reposit
 | Deterministic simulator and local verified bundle | complete, `simulation_only` |
 | Pinned llm-d Router Kind/Envoy SSE smoke | complete locally |
 | Pinned llm-d observational adapter and raw-log normalizer | complete locally |
-| Condition driver/controller, per-group receipts, and strict P2P transfer join | complete; environment adapters are operator-supplied |
+| Condition driver/controller, per-group receipts, and strict P2P transfer join | cache/load driver is included; Z0-C still requires measured model-runtime transfer JSONL if and only if Z0-B does not pass |
 | Offline N-aware replay and paired-p95 statistics | complete |
 | Ledger-derived gate compiler and tamper-bound signing | complete locally |
 | Real-GPU calibration | not run |

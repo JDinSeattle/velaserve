@@ -19,6 +19,7 @@
         "queue_depth": 1,
         "running_requests": 2,
         "local_prefix_tokens": 4096,
+        "source_prefix_tokens": 0,
         "observed_inflight": 2
       }
     ]
@@ -26,4 +27,3 @@
   "target": {"id": "sim-0", "model": "test-model"},
   "observed_at": "2026-08-25T20:00:00Z"
 }
-

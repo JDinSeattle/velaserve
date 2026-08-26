@@ -28,11 +28,11 @@ The online request path contains only upstream routing. The N-aware planner is o
 | Component | Role | Evidence boundary |
 |---|---|---|
 | `fanoutbench` | Sends N sibling streams with deterministic IDs/skew and waits for all terminal outcomes | Records child TTFT, latency, completion, usage, and group makespan |
-| condition controller | Calls an operator-supplied workload-state driver before each real group | Records the observed-state payload plus revision/SHA-bound load, cache, and source-count receipt |
+| condition controller + driver | Resets and zero-probes every replica, warms the exact private prefix on deterministic owners, requires full-prefix cached-token readback, drives/measures background load, and rechecks owners | Records the revision/SHA-bound load, cache, and source-count receipt; prompt text and credentials are never retained |
 | `simfleet` | Models eight deterministic endpoints and emits normalized routing records | Always labeled `simulation_only`; not a performance proxy |
-| llm-d EPP | Runs frozen precise-affinity + P2P or load-aware + P2P profiles | Exact commit plus a reviewable observational-only patch that emits candidate snapshots and targets |
+| llm-d EPP | Runs frozen precise-affinity + P2P or load-aware + P2P profiles | Exact commit plus a reviewable observational-only patch that emits candidate snapshots, target, selected source, and per-endpoint indexed source-prefix coverage |
 | `placement-recorder` | Joins request/group IDs across result, Envoy, and EPP records | Preserves unmatched inputs instead of inventing a target |
-| source-pressure compiler | Joins one raw model-runtime acquisition event to every condition-attested Z0-C child | Derives source count and last-sibling TTFT from the group rather than trusting the adapter |
+| source-pressure compiler | Joins group, EPP placement, and one raw model-runtime acquisition event for every Z0-C child | Requires runtime source = EPP-selected source, transfer completion before first content, and exact dispatch-time EPP index = attested source set |
 | N-aware oracle | Evaluates feasible endpoint allocation from the observed snapshot | Prediction depends on a hashed, operator-supplied calibration |
 | gate compiler | Re-verifies ledgers, invariant deployment bindings, raw-to-derived equality, matrix completeness, sequential Z0-B/Z0-C eligibility, confidence, threshold, and adjacency | Only compiler output can enter the signing command |
 | artifact ledger | Records a canonical relative path, byte count, SHA-256, and timestamp | Duplicate paths, traversal, symlinks, and later mutation fail verification |
@@ -54,7 +54,9 @@ The chart permits only the two Stage-1 upstream routing profiles. A second EPP r
 
 Terraform describes a dedicated VPC, private worker subnets, EKS, a two-node CPU system group, Karpenter, immutable ECR repositories, an encrypted/versioned S3 evidence bucket, and Pod Identity scoped to `runs/*`. The GPU NodePool is scale-to-zero and bounded to six through eight GPUs for the real benchmark.
 
-The operator owns the model deployment. It must expose six to eight homogeneous vLLM pods with label `app.kubernetes.io/name=velaserve-model`, service `velaserve-model` on port 8000, an immutable model revision, and digest-addressed images. `aws-z0-values.yaml` disables simfleet and points the EPP only at that declared service/selector.
+The operator owns the model deployment. It must expose six to eight homogeneous vLLM pods with label `app.kubernetes.io/name=velaserve-model`, stable per-pod chat/reset URLs, service `velaserve-model` on port 8000, automatic prefix caching, prompt-token-detail responses, an immutable model revision, and digest-addressed images. The support chart deploys the repository's condition driver and controller from the same immutable VelaServe image and rolls the driver when its endpoint ConfigMap changes. `aws-z0-values.yaml` disables simfleet and points the EPP only at the declared real service/selector.
+
+`metrics.prom` and `traces.jsonl` are immutable per-run files, not live scrape or OTLP endpoints. The Prometheus rules and Grafana dashboard are optional post-import assets for an operator who loads those records into an observability backend; Stage 1 does not deploy Prometheus, Grafana, or an OpenTelemetry Collector and does not claim live monitoring.
 
 ## Conditional future branch
 

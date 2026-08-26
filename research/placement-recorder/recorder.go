@@ -20,15 +20,23 @@ import (
 const (
 	EPPSchedulingSchemaVersion = "velaserve.epp-scheduling/v1"
 	maxRecorderLineBytes       = 16 << 20
+	envoyClockTolerance        = 100 * time.Millisecond
 )
 
 type EPPRecord struct {
-	SchemaVersion string                    `json:"schema_version"`
-	RequestID     string                    `json:"request_id"`
-	GroupID       string                    `json:"group_id"`
-	ObservedAt    time.Time                 `json:"observed_at"`
-	Snapshot      evidence.EndpointSnapshot `json:"snapshot"`
-	Target        evidence.EndpointRef      `json:"target"`
+	SchemaVersion         string                    `json:"schema_version"`
+	RequestID             string                    `json:"request_id"`
+	GroupID               string                    `json:"group_id"`
+	EmitterPodName        string                    `json:"emitter_pod_name,omitempty"`
+	EmitterPodUID         string                    `json:"emitter_pod_uid,omitempty"`
+	ObservedAt            time.Time                 `json:"observed_at"`
+	Snapshot              evidence.EndpointSnapshot `json:"snapshot"`
+	Target                evidence.EndpointRef      `json:"target"`
+	TargetHost            string                    `json:"target_host"`
+	ScoredCandidates      []evidence.EndpointScore  `json:"scored_candidates,omitempty"`
+	SelectedP2PSource     *evidence.PrefixSource    `json:"selected_p2p_source,omitempty"`
+	SelectedP2PSourceHost string                    `json:"selected_p2p_source_host,omitempty"`
+	SelectedP2PSourcePort uint32                    `json:"selected_p2p_source_port,omitempty"`
 }
 
 type IngestOptions struct {
@@ -83,6 +91,18 @@ func ParseEPP(line []byte) (EPPRecord, error) {
 	if record.ObservedAt.IsZero() {
 		return EPPRecord{}, fmt.Errorf("observed_at: required")
 	}
+	if (strings.TrimSpace(record.EmitterPodName) == "") != (strings.TrimSpace(record.EmitterPodUID) == "") {
+		return EPPRecord{}, fmt.Errorf("emitter pod name and UID must be an all-or-none tuple")
+	}
+	if strings.TrimSpace(record.TargetHost) == "" {
+		return EPPRecord{}, fmt.Errorf("target_host: required")
+	}
+	if record.SelectedP2PSource != nil && (strings.TrimSpace(record.SelectedP2PSourceHost) == "" || record.SelectedP2PSourcePort == 0) {
+		return EPPRecord{}, fmt.Errorf("selected_p2p_source: host and port are required")
+	}
+	if record.SelectedP2PSource == nil && (record.SelectedP2PSourceHost != "" || record.SelectedP2PSourcePort != 0) {
+		return EPPRecord{}, fmt.Errorf("selected_p2p_source: host and port require a selected source")
+	}
 	return record, nil
 }
 
@@ -102,15 +122,38 @@ func Correlate(envoy EnvoyRecord, epp EPPRecord, group evidence.GroupResult) (ev
 	if epp.RequestID != envoy.RequestID {
 		return evidence.PlacementEvent{}, fmt.Errorf("request_id: Envoy and EPP identities do not agree")
 	}
-	childFound := false
+	var matchedChild *evidence.ChildResult
 	for _, child := range group.Children {
 		if child.RequestID == envoy.RequestID {
-			childFound = true
+			copy := child
+			matchedChild = &copy
 			break
 		}
 	}
-	if !childFound {
+	if matchedChild == nil {
 		return evidence.PlacementEvent{}, fmt.Errorf("request_id: %q is absent from benchmark group", envoy.RequestID)
+	}
+	if matchedChild.DispatchedAt == nil || matchedChild.FirstTokenAt == nil || matchedChild.DispatchedAt.IsZero() || matchedChild.FirstTokenAt.IsZero() || matchedChild.FirstTokenAt.Before(*matchedChild.DispatchedAt) {
+		return evidence.PlacementEvent{}, fmt.Errorf("request_id: %q lacks a valid dispatch-to-first-token interval", envoy.RequestID)
+	}
+	if matchedChild.CompletedAt == nil || matchedChild.CompletedAt.IsZero() || matchedChild.CompletedAt.Before(*matchedChild.FirstTokenAt) {
+		return evidence.PlacementEvent{}, fmt.Errorf("request_id: %q lacks a valid stream completion", envoy.RequestID)
+	}
+	if envoy.ResponseCode < 200 || envoy.ResponseCode >= 300 {
+		return evidence.PlacementEvent{}, fmt.Errorf("request_id: %q Envoy response is not 2xx", envoy.RequestID)
+	}
+	if envoy.StartedAt.Before(matchedChild.DispatchedAt.Add(-envoyClockTolerance)) || envoy.StartedAt.After(*matchedChild.FirstTokenAt) {
+		return evidence.PlacementEvent{}, fmt.Errorf("request_id: %q Envoy start is outside the client request interval", envoy.RequestID)
+	}
+	envoyCompletedAt := envoy.StartedAt.Add(time.Duration(envoy.DurationMS) * time.Millisecond)
+	if envoyCompletedAt.Before(matchedChild.FirstTokenAt.Add(-envoyClockTolerance)) || envoyCompletedAt.After(matchedChild.CompletedAt.Add(envoyClockTolerance)) {
+		return evidence.PlacementEvent{}, fmt.Errorf("request_id: %q Envoy stream completion is outside the client stream completion interval", envoy.RequestID)
+	}
+	if epp.ObservedAt.Before(*matchedChild.DispatchedAt) || epp.ObservedAt.After(*matchedChild.FirstTokenAt) {
+		return evidence.PlacementEvent{}, fmt.Errorf("request_id: %q EPP observation is outside its dispatch-to-first-token interval", envoy.RequestID)
+	}
+	if envoy.UpstreamHost != epp.TargetHost {
+		return evidence.PlacementEvent{}, fmt.Errorf("request_id: %q Envoy upstream %q does not match EPP-selected target %q", envoy.RequestID, envoy.UpstreamHost, epp.TargetHost)
 	}
 	attributes := map[string]string{
 		"envoy.upstream_host": envoy.UpstreamHost,
@@ -124,19 +167,23 @@ func Correlate(envoy EnvoyRecord, epp EPPRecord, group evidence.GroupResult) (ev
 		attributes["span_id"] = envoy.SpanID
 	}
 	event := evidence.PlacementEvent{
-		SchemaVersion: evidence.SchemaVersion,
-		RunID:         group.RunID,
-		Arm:           group.Arm,
-		GroupID:       group.GroupID,
-		RequestID:     envoy.RequestID,
-		FanoutWidth:   group.FanoutWidth,
-		ArrivalSkewMS: group.Cell.ArrivalSkewMS,
-		EPPReplicas:   group.Cell.EPPReplicas,
-		LoadRegime:    group.Cell.LoadRegime,
-		Snapshot:      epp.Snapshot,
-		Target:        epp.Target,
-		ObservedAt:    epp.ObservedAt.UTC(),
-		Attributes:    attributes,
+		SchemaVersion:         evidence.SchemaVersion,
+		RunID:                 group.RunID,
+		Arm:                   group.Arm,
+		GroupID:               group.GroupID,
+		RequestID:             envoy.RequestID,
+		FanoutWidth:           group.FanoutWidth,
+		ArrivalSkewMS:         group.Cell.ArrivalSkewMS,
+		EPPReplicas:           group.Cell.EPPReplicas,
+		LoadRegime:            group.Cell.LoadRegime,
+		Snapshot:              epp.Snapshot,
+		Target:                epp.Target,
+		ScoredCandidates:      append([]evidence.EndpointScore(nil), epp.ScoredCandidates...),
+		SelectedP2PSource:     epp.SelectedP2PSource,
+		SelectedP2PSourceHost: epp.SelectedP2PSourceHost,
+		SelectedP2PSourcePort: epp.SelectedP2PSourcePort,
+		ObservedAt:            epp.ObservedAt.UTC(),
+		Attributes:            attributes,
 	}
 	if err := evidence.ValidatePlacementEvent(event); err != nil {
 		return evidence.PlacementEvent{}, fmt.Errorf("correlated placement is invalid: %w", err)

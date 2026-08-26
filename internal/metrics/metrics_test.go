@@ -18,6 +18,14 @@ func TestMetricDescriptorsDoNotContainHighCardinalityLabels(t *testing.T) {
 	}
 }
 
+func TestRunCompletionMetricDoesNotClaimVerifiedArtifactCompletion(t *testing.T) {
+	for _, descriptor := range Descriptors() {
+		if descriptor.Name == "velaserve_zeroing_artifact_complete" {
+			t.Fatal("raw runner must not claim final artifact verification")
+		}
+	}
+}
+
 func TestObserveGroupPublishesSpecNamedMetrics(t *testing.T) {
 	registry := prometheus.NewRegistry()
 	metrics, err := New(registry)

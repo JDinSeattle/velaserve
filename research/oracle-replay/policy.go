@@ -7,6 +7,7 @@ import (
 	"sort"
 
 	"github.com/JDinSeattle/velaserve/internal/evidence"
+	"github.com/JDinSeattle/velaserve/internal/fanout/model"
 	"github.com/JDinSeattle/velaserve/internal/fanout/planner"
 )
 
@@ -16,6 +17,7 @@ type Input struct {
 	Snapshot                        evidence.EndpointSnapshot `json:"snapshot"`
 	Calibration                     planner.Calibration       `json:"calibration"`
 	ArrivalSkewSeconds              float64                   `json:"arrival_skew_seconds"`
+	ArrivalOffsetsSeconds           []float64                 `json:"arrival_offsets_seconds,omitempty"`
 	InflightPublicationDelaySeconds float64                   `json:"inflight_publication_delay_seconds"`
 	AffinityLoadGateSeconds         float64                   `json:"affinity_load_gate_seconds"`
 }
@@ -50,6 +52,98 @@ func (AffinityP2PPolicy) Replay(in Input) (ReplayResult, error) {
 func ReplayArmA(in Input) (ReplayResult, error) { return AffinityP2PPolicy{}.Replay(in) }
 func ReplayArmB(in Input) (ReplayResult, error) { return LoadAwareP2PPolicy{}.Replay(in) }
 
+// EvaluateObservedArmB scores the exact target vector selected by the deployed
+// upstream Arm-B scheduler. Each sibling contributes its own post-screener,
+// post-producer endpoint snapshot; no local policy is allowed to substitute a
+// different target for the one observed on the request path.
+func EvaluateObservedArmB(events []evidence.PlacementEvent, calibration planner.Calibration, prefixTokens uint64) (ReplayResult, error) {
+	if len(events) == 0 {
+		return ReplayResult{}, fmt.Errorf("observed Arm-B vector is empty")
+	}
+	ordered := append([]evidence.PlacementEvent(nil), events...)
+	sort.Slice(ordered, func(i, j int) bool {
+		if !ordered[i].ObservedAt.Equal(ordered[j].ObservedAt) {
+			return ordered[i].ObservedAt.Before(ordered[j].ObservedAt)
+		}
+		return ordered[i].RequestID < ordered[j].RequestID
+	})
+	first := ordered[0]
+	if len(ordered) != int(first.FanoutWidth) {
+		return ReplayResult{}, fmt.Errorf("observed Arm-B vector has %d siblings, want declared width %d", len(ordered), first.FanoutWidth)
+	}
+	result := ReplayResult{Arm: evidence.ArmLoadAwareP2P, Width: first.FanoutWidth, Slots: make([]planner.SlotAssignment, 0, len(ordered))}
+	seenRequests := make(map[string]struct{}, len(ordered))
+	distinctTargets := make(map[evidence.EndpointRef]struct{})
+	reservedUntil := make(map[evidence.EndpointRef]float64)
+	for index, event := range ordered {
+		if err := evidence.ValidatePlacementEvent(event); err != nil {
+			return ReplayResult{}, fmt.Errorf("observed Arm-B sibling %d: %w", index+1, err)
+		}
+		if event.RunID != first.RunID || event.GroupID != first.GroupID || event.FanoutWidth != first.FanoutWidth || event.Arm != evidence.ArmLoadAwareP2P {
+			return ReplayResult{}, fmt.Errorf("observed Arm-B sibling %d does not share the group identity, width, and Arm B", index+1)
+		}
+		if _, exists := seenRequests[event.RequestID]; exists {
+			return ReplayResult{}, fmt.Errorf("observed Arm-B request %q is duplicated", event.RequestID)
+		}
+		seenRequests[event.RequestID] = struct{}{}
+		endpoint, ok := findEndpoint(withMeasuredAvailability(event.Snapshot, calibration.ServiceSeconds), event.Target)
+		if !ok {
+			return ReplayResult{}, fmt.Errorf("observed Arm-B target %q is absent from sibling snapshot", event.Target.ID)
+		}
+		arrival := event.ObservedAt.Sub(first.ObservedAt).Seconds()
+		if arrival < 0 {
+			return ReplayResult{}, fmt.Errorf("observed Arm-B sibling time precedes group origin")
+		}
+		if reservedUntil[event.Target] > arrival+endpoint.AvailableAtSeconds {
+			endpoint.AvailableAtSeconds = reservedUntil[event.Target] - arrival
+		}
+		// The deployed EPP has already selected both the compute target and,
+		// when present, the P2P source. Score that exact acquisition class even
+		// when an offline optimizer would prefer recomputation.
+		prefixReady, acquisition, err := observedAcquisitionCost(endpoint, event.SelectedP2PSource, prefixTokens, calibration)
+		if err != nil {
+			return ReplayResult{}, fmt.Errorf("score observed Arm-B sibling %d: %w", index+1, err)
+		}
+		assignment := planner.SlotAssignment{
+			Target: event.Target, Acquisition: acquisition, PrefixReadyAt: prefixReady,
+			PredictedFinish: math.Max(endpoint.AvailableAtSeconds, prefixReady) + calibration.ServiceSeconds,
+		}
+		assignment.SlotID = uint32(index)
+		assignment.PrefixReadyAt += arrival
+		assignment.PredictedFinish += arrival
+		result.Slots = append(result.Slots, assignment)
+		reservedUntil[event.Target] = assignment.PredictedFinish
+		distinctTargets[event.Target] = struct{}{}
+		if assignment.PredictedFinish > result.PredictedMakespan {
+			result.PredictedMakespan = assignment.PredictedFinish
+		}
+	}
+	result.K = uint32(len(distinctTargets))
+	return result, nil
+}
+
+func observedAcquisitionCost(endpoint evidence.EndpointState, selected *evidence.PrefixSource, prefixTokens uint64, calibration planner.Calibration) (float64, model.AcquisitionClass, error) {
+	if selected != nil {
+		if selected.CachedTokens < prefixTokens {
+			return 0, "", fmt.Errorf("selected P2P source has only %d/%d prefix tokens", selected.CachedTokens, prefixTokens)
+		}
+		missingTokens := uint64(0)
+		if endpoint.LocalPrefixTokens < prefixTokens {
+			missingTokens = prefixTokens - endpoint.LocalPrefixTokens
+		}
+		bytes := selected.TransferBytes
+		if bytes == 0 {
+			bytes = uint64(math.Ceil(float64(missingTokens) * calibration.BytesPerCachedToken))
+		}
+		return float64(bytes) / calibration.PullBytesPerSecond, model.AcquisitionP2PPull, nil
+	}
+	if endpoint.LocalPrefixTokens >= prefixTokens {
+		return 0, model.AcquisitionLocalHit, nil
+	}
+	missingTokens := prefixTokens - endpoint.LocalPrefixTokens
+	return float64(missingTokens) / calibration.PrefillTokensPerSecond, model.AcquisitionRecompute, nil
+}
+
 type chooser func(Input, evidence.EndpointSnapshot) (evidence.EndpointRef, error)
 
 type pendingPublication struct {
@@ -71,7 +165,7 @@ func replayPerRequest(in Input, arm evidence.Arm, selectTarget chooser) (ReplayR
 	result := ReplayResult{Arm: arm, Width: in.Width, Slots: make([]planner.SlotAssignment, 0, in.Width)}
 	distinct := make(map[evidence.EndpointRef]struct{})
 	for slotID := uint32(0); slotID < in.Width; slotID++ {
-		arrival := float64(slotID) * in.ArrivalSkewSeconds
+		arrival := arrivalAt(in, slotID)
 		remaining := pending[:0]
 		for _, update := range pending {
 			if update.publishAt <= arrival+1e-12 {
@@ -173,6 +267,16 @@ func validateReplayInput(in Input) error {
 	if invalidNonNegative(in.ArrivalSkewSeconds) {
 		return fmt.Errorf("arrival skew must be finite and non-negative")
 	}
+	if len(in.ArrivalOffsetsSeconds) > 0 {
+		if len(in.ArrivalOffsetsSeconds) != int(in.Width) {
+			return fmt.Errorf("arrival offsets must have exactly one value per sibling")
+		}
+		for index, offset := range in.ArrivalOffsetsSeconds {
+			if invalidNonNegative(offset) || (index == 0 && math.Abs(offset) > 1e-12) || (index > 0 && offset < in.ArrivalOffsetsSeconds[index-1]) {
+				return fmt.Errorf("arrival offsets must start at zero and be finite, non-negative, and nondecreasing")
+			}
+		}
+	}
 	if invalidNonNegative(in.InflightPublicationDelaySeconds) {
 		return fmt.Errorf("inflight publication delay must be finite and non-negative")
 	}
@@ -186,6 +290,13 @@ func validateReplayInput(in Input) error {
 		Calibration:  in.Calibration,
 	})
 	return err
+}
+
+func arrivalAt(in Input, slotID uint32) float64 {
+	if len(in.ArrivalOffsetsSeconds) == int(in.Width) {
+		return in.ArrivalOffsetsSeconds[slotID]
+	}
+	return float64(slotID) * in.ArrivalSkewSeconds
 }
 
 func relativeSnapshot(snapshot evidence.EndpointSnapshot, at float64) evidence.EndpointSnapshot {

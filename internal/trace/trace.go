@@ -5,30 +5,16 @@ package trace
 
 import (
 	"context"
-	"strings"
+	"time"
 	"unicode/utf8"
 
+	"github.com/JDinSeattle/velaserve/internal/evidence"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 )
 
-var RequiredOperations = []string{
-	"plan-preview",
-	"scheduling",
-	"queue-wait",
-	"kv-acquisition",
-	"inference",
-	"stream-completion",
-}
-
 type Limits struct {
 	MaxAttributeBytes int
-}
-
-type GroupTrace struct {
-	RunID      string
-	GroupID    string
-	RequestIDs []string
 }
 
 type Recorder struct {
@@ -44,26 +30,52 @@ func New(tracer trace.Tracer, limits Limits) Recorder {
 	return Recorder{tracer: tracer, maxAttributeBytes: maximum}
 }
 
-// RecordLifecycle emits a parent and the Stage 1 child-span topology. Runtime
-// integrations may add events and duration around these operations while
-// preserving the same bounded attribute contract.
-func (recorder Recorder) RecordLifecycle(ctx context.Context, group GroupTrace) {
+// RecordGroup exports only intervals that the benchmark actually observed.
+// It intentionally does not synthesize planner, queue, or KV-transfer spans.
+func (recorder Recorder) RecordGroup(ctx context.Context, result evidence.GroupResult) bool {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	requestIDs := strings.Join(group.RequestIDs, ",")
-	groupContext, parent := recorder.tracer.Start(ctx, "fanout-group", trace.WithAttributes(
-		attribute.String("velaserve.run_id", recorder.bound(group.RunID)),
-		attribute.String("velaserve.group_id", recorder.bound(group.GroupID)),
-		attribute.String("velaserve.request_ids", recorder.bound(requestIDs)),
-	))
-	for _, operation := range RequiredOperations {
-		_, child := recorder.tracer.Start(groupContext, operation, trace.WithAttributes(
-			attribute.String("velaserve.operation", recorder.bound(operation)),
-		))
-		child.End()
+	start, end, ok := observedInterval(result.Children)
+	if !ok {
+		return false
 	}
-	parent.End()
+	groupContext, parent := recorder.tracer.Start(ctx, "fanout-group", trace.WithAttributes(
+		attribute.String("velaserve.run_id", recorder.bound(result.RunID)),
+		attribute.String("velaserve.group_id", recorder.bound(result.GroupID)),
+		attribute.String("velaserve.outcome", string(result.Outcome)),
+	), trace.WithTimestamp(start))
+	for _, childResult := range result.Children {
+		if childResult.DispatchedAt == nil || childResult.CompletedAt == nil || childResult.CompletedAt.Before(*childResult.DispatchedAt) {
+			continue
+		}
+		_, child := recorder.tracer.Start(groupContext, "inference-request", trace.WithAttributes(
+			attribute.String("velaserve.request_id", recorder.bound(childResult.RequestID)),
+			attribute.String("velaserve.outcome", string(childResult.Outcome)),
+		), trace.WithTimestamp(childResult.DispatchedAt.UTC()))
+		if childResult.FirstTokenAt != nil && !childResult.FirstTokenAt.Before(*childResult.DispatchedAt) && !childResult.FirstTokenAt.After(*childResult.CompletedAt) {
+			child.AddEvent("first-content", trace.WithTimestamp(childResult.FirstTokenAt.UTC()))
+		}
+		child.End(trace.WithTimestamp(childResult.CompletedAt.UTC()))
+	}
+	parent.End(trace.WithTimestamp(end))
+	return true
+}
+
+func observedInterval(children []evidence.ChildResult) (time.Time, time.Time, bool) {
+	var start, end time.Time
+	for _, child := range children {
+		if child.DispatchedAt == nil || child.CompletedAt == nil || child.DispatchedAt.IsZero() || child.CompletedAt.IsZero() || child.CompletedAt.Before(*child.DispatchedAt) {
+			return time.Time{}, time.Time{}, false
+		}
+		if start.IsZero() || child.DispatchedAt.Before(start) {
+			start = child.DispatchedAt.UTC()
+		}
+		if end.IsZero() || child.CompletedAt.After(end) {
+			end = child.CompletedAt.UTC()
+		}
+	}
+	return start, end, !start.IsZero() && !end.IsZero()
 }
 
 func (recorder Recorder) bound(value string) string {

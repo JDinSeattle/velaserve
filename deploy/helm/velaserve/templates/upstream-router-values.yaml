@@ -60,7 +60,7 @@ data:
                 parameters:
                   prefixMatchInfoProducerName: precise-prefix-cache-producer
                   prefillProfileName: default
-                  minCachedTokenDelta: {{ .Values.model.minCachedTokenDelta }}
+                  minCachedTokenDelta: {{ required "model.minCachedTokenDelta must come from the measured crossover override" .Values.model.minCachedTokenDelta }}
             {{- if eq .Values.routingProfile "arm-a-affinity-p2p" }}
               - type: prefix-cache-scorer
                 parameters:
@@ -73,9 +73,10 @@ data:
               - type: max-score-picker
               - type: single-profile-handler
             {{- else }}
-              - type: queue-scorer
-              - type: kv-cache-utilization-scorer
-              - type: weighted-random-picker
+              - type: load-aware-scorer
+                parameters:
+                  threshold: 128
+              - type: max-score-picker
               - type: single-profile-handler
             {{- end }}
             dataLayer:
@@ -100,11 +101,9 @@ data:
                   - pluginRef: no-hit-lru-scorer
                     weight: 2
             {{- else }}
-                  - pluginRef: weighted-random-picker
-                  - pluginRef: queue-scorer
-                    weight: 3
-                  - pluginRef: kv-cache-utilization-scorer
-                    weight: 2
+                  - pluginRef: load-aware-scorer
+                    weight: 1
+                  - pluginRef: max-score-picker
             {{- end }}
         resources:
           requests:

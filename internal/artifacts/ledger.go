@@ -95,6 +95,34 @@ func Verify(root string) error {
 	return nil
 }
 
+// RequireLedgerEntries fails closed when a consumer depends on an artifact that
+// was not committed to the immutable ledger. Verify must be called first so the
+// returned membership is meaningful; this function repeats the inexpensive
+// ledger parse deliberately so callers cannot accidentally use a stale set.
+func RequireLedgerEntries(root string, required ...string) error {
+	entries, err := readLedger(root)
+	if err != nil {
+		return err
+	}
+	listed := make(map[string]struct{}, len(entries))
+	for _, entry := range entries {
+		listed[entry.RelativePath] = struct{}{}
+	}
+	for index, relativePath := range required {
+		_, normalized, err := safeArtifactPath(root, relativePath)
+		if err != nil {
+			return fmt.Errorf("required artifact %d: %w", index+1, err)
+		}
+		if normalized != relativePath {
+			return fmt.Errorf("required artifact %q is not a canonical relative path", relativePath)
+		}
+		if _, ok := listed[relativePath]; !ok {
+			return fmt.Errorf("required artifact %q is absent from %s", relativePath, LedgerName)
+		}
+	}
+	return nil
+}
+
 func readLedger(root string) ([]Entry, error) {
 	path := filepath.Join(root, LedgerName)
 	entries, err := jsonl.Read[Entry](path)

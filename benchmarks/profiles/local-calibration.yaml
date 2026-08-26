@@ -14,7 +14,7 @@ prefixes:
     repeat_text: "shared simulated context "
     repeat_count: 64
 outputs:
-  - id: short
+  - id: smoke
     max_tokens: 8
 load_regimes: [moderate]
 cache_states: [warm-owner]

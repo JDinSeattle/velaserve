@@ -4,36 +4,46 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"reflect"
-	"sort"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/JDinSeattle/velaserve/internal/evidence"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 )
 
-func TestGroupTraceContainsRequiredChildSpans(t *testing.T) {
+func TestGroupTraceUsesObservedRequestIntervals(t *testing.T) {
 	exporter := tracetest.NewInMemoryExporter()
 	provider := sdktrace.NewTracerProvider(sdktrace.WithSyncer(exporter))
 	recorder := New(provider.Tracer("velaserve-test"), Limits{MaxAttributeBytes: 128})
-	recorder.RecordLifecycle(context.Background(), GroupTrace{
-		RunID:      "run-1",
-		GroupID:    "group-1",
-		RequestIDs: []string{"request-1", "request-2"},
-	})
+	result := tracedGroup()
+	if !recorder.RecordGroup(context.Background(), result) {
+		t.Fatal("RecordGroup() rejected complete observed intervals")
+	}
 	spans := exporter.GetSpans()
-	names := make([]string, 0, len(spans))
+	requestSpans := 0
 	for _, span := range spans {
-		if span.Name != "fanout-group" {
-			names = append(names, span.Name)
+		if span.Name == "inference-request" {
+			requestSpans++
+			if span.EndTime.Sub(span.StartTime) != time.Second {
+				t.Fatalf("request span duration = %s, want observed one second", span.EndTime.Sub(span.StartTime))
+			}
 		}
 	}
-	sort.Strings(names)
-	want := append([]string(nil), RequiredOperations...)
-	sort.Strings(want)
-	if !reflect.DeepEqual(names, want) {
-		t.Fatalf("child spans = %v, want %v", names, want)
+	if requestSpans != 2 {
+		t.Fatalf("request spans = %d, want 2", requestSpans)
+	}
+}
+
+func TestGroupTraceRefusesMissingRuntimeTimestamps(t *testing.T) {
+	exporter := tracetest.NewInMemoryExporter()
+	provider := sdktrace.NewTracerProvider(sdktrace.WithSyncer(exporter))
+	if New(provider.Tracer("test"), Limits{}).RecordGroup(context.Background(), evidence.GroupResult{Children: []evidence.ChildResult{{RequestID: "missing"}}}) {
+		t.Fatal("RecordGroup() synthesized an interval without runtime timestamps")
+	}
+	if len(exporter.GetSpans()) != 0 {
+		t.Fatal("missing intervals produced synthetic spans")
 	}
 }
 
@@ -44,7 +54,7 @@ func TestJSONLExporterWritesRuntimeSpans(t *testing.T) {
 		t.Fatal(err)
 	}
 	provider := sdktrace.NewTracerProvider(sdktrace.WithSyncer(exporter))
-	New(provider.Tracer("test"), Limits{}).RecordLifecycle(context.Background(), GroupTrace{RunID: "run", GroupID: "group"})
+	New(provider.Tracer("test"), Limits{}).RecordGroup(context.Background(), tracedGroup())
 	if err := provider.Shutdown(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -61,12 +71,31 @@ func TestTraceAttributesAreBounded(t *testing.T) {
 	exporter := tracetest.NewInMemoryExporter()
 	provider := sdktrace.NewTracerProvider(sdktrace.WithSyncer(exporter))
 	recorder := New(provider.Tracer("velaserve-test"), Limits{MaxAttributeBytes: 8})
-	recorder.RecordLifecycle(context.Background(), GroupTrace{RunID: "run-long-value", GroupID: "group-long-value"})
+	result := tracedGroup()
+	result.RunID = "run-long-value"
+	result.GroupID = "group-long-value"
+	result.Children[0].RequestID = "request-long-value"
+	recorder.RecordGroup(context.Background(), result)
 	for _, span := range exporter.GetSpans() {
 		for _, attribute := range span.Attributes {
 			if len(attribute.Value.AsString()) > 8 {
 				t.Fatalf("attribute %s was not bounded: %q", attribute.Key, attribute.Value.AsString())
 			}
 		}
+	}
+}
+
+func tracedGroup() evidence.GroupResult {
+	start := time.Date(2026, 8, 26, 8, 0, 0, 0, time.UTC)
+	secondStart := start.Add(time.Millisecond)
+	firstToken := start.Add(100 * time.Millisecond)
+	firstEnd := start.Add(time.Second)
+	secondEnd := secondStart.Add(time.Second)
+	return evidence.GroupResult{
+		RunID: "run-1", GroupID: "group-1", Outcome: evidence.OutcomeSuccess,
+		Children: []evidence.ChildResult{
+			{RequestID: "request-1", Outcome: evidence.OutcomeSuccess, DispatchedAt: &start, FirstTokenAt: &firstToken, CompletedAt: &firstEnd},
+			{RequestID: "request-2", Outcome: evidence.OutcomeSuccess, DispatchedAt: &secondStart, CompletedAt: &secondEnd},
+		},
 	}
 }

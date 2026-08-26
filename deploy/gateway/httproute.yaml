@@ -4,6 +4,42 @@ metadata:
   name: envoy
 spec:
   controllerName: gateway.envoyproxy.io/gatewayclass-controller
+  parametersRef:
+    group: gateway.envoyproxy.io
+    kind: EnvoyProxy
+    name: velaserve
+    namespace: envoy-gateway-system
+---
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: EnvoyProxy
+metadata:
+  name: velaserve
+  namespace: envoy-gateway-system
+spec:
+  provider:
+    type: Kubernetes
+    kubernetes:
+      envoyService:
+        type: ClusterIP
+  telemetry:
+    accessLog:
+      settings:
+        - type: Route
+          format:
+            type: JSON
+            json:
+              START_TIME: "%START_TIME%"
+              REQ(X-REQUEST-ID): "%REQ(X-REQUEST-ID)%"
+              REQ(X-VELA-FANOUT-GROUP): "%REQ(X-VELA-FANOUT-GROUP)%"
+              UPSTREAM_HOST: "%UPSTREAM_HOST%"
+              RESPONSE_CODE: "%RESPONSE_CODE%"
+              DURATION: "%DURATION%"
+              TRACE_ID: "%TRACE_ID%"
+              SPAN_ID: "%SPAN_ID%"
+          sinks:
+            - type: File
+              file:
+                path: /dev/stdout
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
