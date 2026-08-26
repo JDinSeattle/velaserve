@@ -115,12 +115,30 @@ gateway_namespace="$(jq -r '.items[0].metadata.namespace' <<<"$gateway_services"
 gateway_service="$(jq -r '.items[0].metadata.name' <<<"$gateway_services")"
 gateway_port="$(jq -r '.items[0].spec.ports[] | select(.port == 80) | .port' <<<"$gateway_services")"
 [[ "$gateway_port" == "80" ]] || { echo "generated Envoy Gateway service has no HTTP port 80" >&2; exit 1; }
+gateway_selector="$(jq -r '.items[0].spec.selector | to_entries | map("\(.key)=\(.value)") | join(",")' <<<"$gateway_services")"
+[[ -n "$gateway_selector" && "$gateway_selector" != "null" ]] || { echo "generated Envoy Gateway service has no pod selector" >&2; exit 1; }
+kubectl --context "$CONTEXT" --namespace "$gateway_namespace" wait --timeout=5m --for=condition=Ready pod -l "$gateway_selector"
 
 port_forward_log="${REPOSITORY_ROOT}/.tools/kind-port-forward.log"
 nohup kubectl --context "$CONTEXT" --namespace "$gateway_namespace" port-forward "service/${gateway_service}" 18081:80 </dev/null >"$port_forward_log" 2>&1 &
 port_forward_pid=$!
 echo "$port_forward_pid" >"${REPOSITORY_ROOT}/.tools/kind-port-forward.pid"
 echo "http://127.0.0.1:18081/v1/chat/completions" >"${REPOSITORY_ROOT}/.tools/kind-endpoint"
+
+port_forward_ready=0
+for attempt in $(seq 1 30); do
+  if ! kill -0 "$port_forward_pid" 2>/dev/null; then
+    sed -n '1,120p' "$port_forward_log" >&2
+    echo "Envoy Gateway port-forward exited before becoming ready" >&2
+    exit 1
+  fi
+  if grep -Fq 'Forwarding from 127.0.0.1:18081' "$port_forward_log"; then
+    port_forward_ready=1
+    break
+  fi
+  sleep 1
+done
+[[ "$port_forward_ready" == "1" ]] || { sed -n '1,120p' "$port_forward_log" >&2; echo "Envoy Gateway port-forward did not become ready" >&2; exit 1; }
 
 for attempt in $(seq 1 30); do
   if curl --fail --silent --show-error \
@@ -142,4 +160,5 @@ if kill -0 "$port_forward_pid" 2>/dev/null; then
   kill "$port_forward_pid"
 fi
 echo "Kind endpoint did not produce a complete SSE stream; inspect $port_forward_log" >&2
+sed -n '1,120p' "$port_forward_log" >&2
 exit 1
