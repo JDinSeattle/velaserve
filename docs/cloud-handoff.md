@@ -181,6 +181,8 @@ export VELASERVE_ARTIFACT_ROOT="$PWD/benchmarks/raw/aws-z0-b-full-01"
 
 `cloud-run-z0.sh` repeats preflight, binds the clean commit and exact deployment, streams raw EPP/inner-Envoy evidence for every EPP Pod, streams raw vLLM acquisition/transfer records for Z0-C, and writes a new append-only run root. Every workload group must receive a condition receipt proving reset, exact cache-owner state, and achieved load before benchmark traffic.
 
+Successful preflight writes `.tools/cloud-preflight-binding.json`, a validated binding of the repository commit, immutable images, live Pod identities, routing configuration and calibration hashes. The run retains its initial binding as `$VELASERVE_ARTIFACT_ROOT/preflight-binding.json`. Collection compares that initial invariant with a fresh preflight binding and rejects deployment drift or restarts; keep both generated artifacts and do not edit them to reconcile a mismatch.
+
 ## 8. Collect and compile
 
 After a run, collection re-runs preflight, rejects deployment drift or restart, normalizes raw streams, derives oracle/source-pressure records, seals the ledger, uploads to a new S3 run prefix, and verifies every remote object:
