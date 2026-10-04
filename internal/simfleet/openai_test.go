@@ -133,6 +133,9 @@ func TestOpenAISimulatorExposesTargetsOnlyThroughSimulatorContract(t *testing.T)
 	if err != nil {
 		t.Fatalf("RunGroup() error = %v", err)
 	}
+	// [DONE] can reach the client before the handler's deferred access-log write.
+	// Wait for every handler to finish before asserting the complete log snapshot.
+	server.Close()
 	if result.Outcome != evidence.OutcomeSuccess || len(result.Children) != 4 {
 		t.Fatalf("result = %#v", result)
 	}

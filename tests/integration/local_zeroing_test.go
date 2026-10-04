@@ -42,6 +42,9 @@ func TestLocalZeroingProducesVerifiedSimulationOnlyBundle(t *testing.T) {
 	if !completion.Complete || completion.PersistedGroups != 32 {
 		t.Fatalf("completion = %#v", completion)
 	}
+	// A completed client stream does not imply the server's deferred access-log
+	// write has run. Join the handlers before sealing the simulation evidence.
+	server.Close()
 	writeEPPLog(t, filepath.Join(root, "epp.jsonl"), fleet)
 	writeEnvoyLog(t, filepath.Join(root, "envoy.jsonl"), fleet)
 	if _, err := zeroprobe.Ingest(context.Background(), root); err != nil {
