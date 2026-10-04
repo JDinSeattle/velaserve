@@ -1,0 +1,28 @@
+{
+  "scope": "Current checkout verification, separate from owner-confirmed cloud results.",
+  "checks": [
+    {
+      "command": "go test ./internal/bench -run TestRunGroupRetainsValidFactsAcrossMalformedUsageAndCancellation -count=1",
+      "exit_code": 0
+    },
+    {
+      "command": "go test ./internal/openai ./internal/evidence ./internal/schemacheck -count=1",
+      "exit_code": 0
+    },
+    {
+      "command": "go test ./... -race",
+      "exit_code": 0,
+      "environment": "outside sandbox to allow local loopback integration sockets"
+    },
+    {
+      "command": "git diff --check",
+      "exit_code": 0
+    }
+  ],
+  "regressions": [
+    "Exact payload limits rejected large legal SSE events",
+    "Malformed usage partially overwrote previous valid observations",
+    "Later usage without cache details retained stale earlier cached count",
+    "Schema allowed observed first-token timestamp without TTFT after global required field was removed"
+  ]
+}

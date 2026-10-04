@@ -131,3 +131,5 @@ Incomplete groups remain in raw evidence and make the bundle ineligible for a po
 ## License and security
 
 The code is available under the [MIT License](LICENSE). See [CONTRIBUTING.md](CONTRIBUTING.md) for evidence-preserving changes and [SECURITY.md](SECURITY.md) for private vulnerability reporting guidance.
+
+Current checkout verification: the full Go race suite passed, including failure-preserving SSE, exact event limits, atomic usage snapshots and observed-TTFT schema regressions. See [local validation](docs/local-validation.json).
