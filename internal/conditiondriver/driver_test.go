@@ -58,7 +58,6 @@ func TestApplyResetsEveryEndpointAndWarmsExactZ0CSourceSet(t *testing.T) {
 		default:
 			return testResponse(http.StatusNotFound, "not found"), nil
 		}
-		return testResponse(http.StatusOK, `{"success":true}`), nil
 	})
 
 	driver, err := newTestDriver(Config{
