@@ -276,11 +276,19 @@ func (client Client) runChild(
 	stream, err := openaiwire.ReadStream(response.Body, openaiwire.StreamOptions{
 		StartedAt:     dispatchedAt,
 		MaxEventBytes: client.MaxEventBytes,
+		DiscardText:   true,
 	})
 	if err != nil {
 		completedAt := client.now()
 		cancelled := errors.Is(childContext.Err(), context.Canceled) && errors.Is(parent.Err(), context.Canceled)
-		return failureAt(requestID, fmt.Errorf("consume OpenAI stream: %w", err), dispatchedAt, completedAt, cancelled)
+		failed := failureAt(requestID, fmt.Errorf("consume OpenAI stream: %w", err), dispatchedAt, completedAt, cancelled)
+		failed.Target = target
+		failed.FirstTokenAt = stream.FirstTokenAt
+		failed.TTFTSeconds = stream.TTFT.Seconds()
+		failed.OutputTokens = stream.OutputTokens
+		failed.PromptTokens = stream.PromptTokens
+		failed.CachedTokens = stream.CachedTokens
+		return failed
 	}
 	completedAt := stream.CompletedAt
 	if completedAt.IsZero() {

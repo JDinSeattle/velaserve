@@ -11,6 +11,7 @@ import (
 	"io"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 const defaultMaxEventBytes = 8 << 20
@@ -23,6 +24,9 @@ type StreamOptions struct {
 	StartedAt     time.Time
 	Clock         Clock
 	MaxEventBytes int
+	// DiscardText retains timing and usage while avoiding accumulated body text.
+	// The default preserves the full-text API contract.
+	DiscardText bool
 }
 
 type StreamResult struct {
@@ -43,7 +47,7 @@ func (wallClock) Now() time.Time { return time.Now().UTC() }
 // ReadStream consumes a complete Server-Sent Events response. A role-only
 // delta is deliberately not counted as a token; TTFT begins at the first
 // content, legacy text, or tool-call delta.
-func ReadStream(reader io.Reader, options StreamOptions) (StreamResult, error) {
+func ReadStream(reader io.Reader, options StreamOptions) (result StreamResult, err error) {
 	if reader == nil {
 		return StreamResult{}, fmt.Errorf("stream reader is required")
 	}
@@ -56,25 +60,29 @@ func ReadStream(reader io.Reader, options StreamOptions) (StreamResult, error) {
 	if options.MaxEventBytes == 0 {
 		options.MaxEventBytes = defaultMaxEventBytes
 	}
-	if options.MaxEventBytes < 0 {
-		return StreamResult{}, fmt.Errorf("maximum event size must be positive")
+	if options.MaxEventBytes < 0 || options.MaxEventBytes > int(^uint(0)>>1)-8 {
+		return StreamResult{}, fmt.Errorf("maximum event size must be positive and leave room for SSE framing")
 	}
 
 	scanner := bufio.NewScanner(reader)
-	scanner.Buffer(make([]byte, 64*1024), options.MaxEventBytes+1)
-	dataLines := make([][]byte, 0, 2)
+	// MaxEventBytes limits data payload, excluding "data: " and CRLF.
+	maxLineBytes := options.MaxEventBytes + 8
+	scanner.Buffer(make([]byte, min(64*1024, maxLineBytes)), maxLineBytes)
+	payload := make([]byte, 0, 4096)
+	dataLines := 0
 	eventBytes := 0
-	result := StreamResult{}
 	var text strings.Builder
+	defer func() { result.Text = text.String() }()
 
 	dispatch := func() (bool, error) {
-		if len(dataLines) == 0 {
+		if dataLines == 0 {
 			return false, nil
 		}
-		payload := bytes.Join(dataLines, []byte("\n"))
-		dataLines = dataLines[:0]
-		eventBytes = 0
+		defer func() { payload = payload[:0]; dataLines = 0; eventBytes = 0 }()
 		eventAt := options.Clock.Now().UTC()
+		if !utf8.Valid(payload) {
+			return false, fmt.Errorf("OpenAI stream event contains invalid UTF-8")
+		}
 		if bytes.Equal(bytes.TrimSpace(payload), []byte("[DONE]")) {
 			if result.FirstTokenAt == nil {
 				return false, fmt.Errorf("OpenAI stream reached [DONE] before semantic output")
@@ -97,31 +105,39 @@ func ReadStream(reader io.Reader, options StreamOptions) (StreamResult, error) {
 			return false, fmt.Errorf("OpenAI stream error: %s", message)
 		}
 		if frame.Usage != nil {
+			// A usage frame is one snapshot. Validate all fields before replacing
+			// prior observations so malformed tails cannot poison failure evidence.
+			var cachedTokens *uint64
+			if len(frame.Usage.PromptTokensDetails) > 0 &&
+				!bytes.Equal(bytes.TrimSpace(frame.Usage.PromptTokensDetails), []byte("null")) {
+				var details struct {
+					CachedTokens *uint64 `json:"cached_tokens"`
+				}
+				if err := json.Unmarshal(frame.Usage.PromptTokensDetails, &details); err != nil {
+					return false, fmt.Errorf("decode OpenAI prompt token details: %w", err)
+				}
+				cachedTokens = details.CachedTokens
+			}
+			if cachedTokens != nil && (frame.Usage.PromptTokens == 0 || *cachedTokens > frame.Usage.PromptTokens) {
+				return false, fmt.Errorf("OpenAI cached tokens require a positive prompt count and cannot exceed it")
+			}
 			result.OutputTokens = frame.Usage.CompletionTokens
 			result.PromptTokens = frame.Usage.PromptTokens
-			if len(frame.Usage.PromptTokensDetails) > 0 {
-				if bytes.Equal(bytes.TrimSpace(frame.Usage.PromptTokensDetails), []byte("null")) {
-					result.CachedTokens = nil
-				} else {
-					var details struct {
-						CachedTokens *uint64 `json:"cached_tokens"`
-					}
-					if err := json.Unmarshal(frame.Usage.PromptTokensDetails, &details); err != nil {
-						return false, fmt.Errorf("decode OpenAI prompt token details: %w", err)
-					}
-					result.CachedTokens = details.CachedTokens
-				}
-			}
+			result.CachedTokens = cachedTokens
 		}
 
 		semanticDelta := false
 		for _, choice := range frame.Choices {
 			if choice.Delta.Content != "" {
-				text.WriteString(choice.Delta.Content)
+				if !options.DiscardText {
+					text.WriteString(choice.Delta.Content)
+				}
 				semanticDelta = true
 			}
 			if choice.Text != "" {
-				text.WriteString(choice.Text)
+				if !options.DiscardText {
+					text.WriteString(choice.Text)
+				}
 				semanticDelta = true
 			}
 			if len(choice.Delta.ToolCalls) > 0 {
@@ -141,7 +157,7 @@ func ReadStream(reader io.Reader, options StreamOptions) (StreamResult, error) {
 		if len(line) == 0 {
 			done, err := dispatch()
 			if err != nil {
-				return StreamResult{}, err
+				return result, err
 			}
 			if done {
 				return result, nil
@@ -159,23 +175,29 @@ func ReadStream(reader io.Reader, options StreamOptions) (StreamResult, error) {
 			value = value[1:]
 		}
 		eventBytes += len(value)
-		if len(dataLines) > 0 {
+		if dataLines > 0 {
 			eventBytes++
 		}
 		if eventBytes > options.MaxEventBytes {
-			return StreamResult{}, fmt.Errorf("OpenAI stream event exceeds %d bytes", options.MaxEventBytes)
+			return result, fmt.Errorf("OpenAI stream event exceeds %d bytes", options.MaxEventBytes)
 		}
-		dataLines = append(dataLines, bytes.Clone(value))
+		if dataLines > 0 {
+			payload = append(payload, '\n')
+		}
+		payload = append(payload, value...)
+		dataLines++
 	}
 	if err := scanner.Err(); err != nil {
-		return StreamResult{}, fmt.Errorf("read OpenAI stream: %w", err)
+		return result, fmt.Errorf("read OpenAI stream: %w", err)
 	}
-	if len(dataLines) > 0 {
-		if _, err := dispatch(); err != nil {
-			return StreamResult{}, err
+	if dataLines > 0 {
+		if done, err := dispatch(); err != nil {
+			return result, err
+		} else if done {
+			return result, nil
 		}
 	}
-	return StreamResult{}, fmt.Errorf("OpenAI stream ended before [DONE]")
+	return result, fmt.Errorf("OpenAI stream ended before [DONE]")
 }
 
 type streamFrame struct {

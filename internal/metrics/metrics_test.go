@@ -2,6 +2,7 @@ package metrics
 
 import (
 	"testing"
+	"time"
 
 	"github.com/JDinSeattle/velaserve/internal/evidence"
 	"github.com/prometheus/client_golang/prometheus"
@@ -33,12 +34,13 @@ func TestObserveGroupPublishesSpecNamedMetrics(t *testing.T) {
 		t.Fatalf("New() error = %v", err)
 	}
 	recomputed := uint64(4096)
+	first := time.Now()
 	result := evidence.GroupResult{
 		FanoutWidth: 2, MakespanSeconds: 1.2, SlowestChildTTFTSeconds: 0.4,
 		RecomputedPrefixTokens: &recomputed, Outcome: evidence.OutcomeSuccess,
 		Children: []evidence.ChildResult{
-			{TTFTSeconds: 0.3, LatencySeconds: 1.0},
-			{TTFTSeconds: 0.4, LatencySeconds: 1.2},
+			{TTFTSeconds: 0.3, LatencySeconds: 1.0, FirstTokenAt: &first},
+			{TTFTSeconds: 0.4, LatencySeconds: 1.2, FirstTokenAt: &first},
 		},
 	}
 	metrics.ObserveGroup(result)

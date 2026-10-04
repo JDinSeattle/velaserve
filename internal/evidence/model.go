@@ -1,6 +1,9 @@
 package evidence
 
-import "time"
+import (
+	"encoding/json"
+	"time"
+)
 
 const SchemaVersion = "velaserve.evidence/v1"
 
@@ -109,6 +112,20 @@ type ChildResult struct {
 	DispatchedAt   *time.Time   `json:"dispatched_at,omitempty"`
 	FirstTokenAt   *time.Time   `json:"first_token_at,omitempty"`
 	CompletedAt    *time.Time   `json:"completed_at,omitempty"`
+}
+
+// MarshalJSON leaves unobserved TTFT absent instead of inventing a zero sample.
+// FirstTokenAt distinguishes a real zero-duration observation from no token.
+func (child ChildResult) MarshalJSON() ([]byte, error) {
+	type wire ChildResult
+	var ttft *float64
+	if child.FirstTokenAt != nil {
+		ttft = &child.TTFTSeconds
+	}
+	return json.Marshal(struct {
+		wire
+		TTFT *float64 `json:"ttft_seconds,omitempty"`
+	}{wire: wire(child), TTFT: ttft})
 }
 
 // BenchmarkCell is the frozen workload coordinate needed to reproduce and

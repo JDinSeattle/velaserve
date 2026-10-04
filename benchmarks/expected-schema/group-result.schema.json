@@ -89,7 +89,8 @@
     "child": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["request_id", "ttft_seconds", "latency_seconds", "output_tokens", "outcome", "completed_at"],
+      "required": ["request_id", "latency_seconds", "output_tokens", "outcome", "completed_at"],
+      "dependentRequired": {"first_token_at": ["ttft_seconds", "dispatched_at"]},
       "properties": {
         "request_id": {"type": "string", "minLength": 1},
         "target": {"$ref": "#/$defs/endpointRef"},

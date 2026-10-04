@@ -75,10 +75,16 @@ func New(registerer prometheus.Registerer) (*Metrics, error) {
 func (metrics *Metrics) ObserveGroup(result evidence.GroupResult) {
 	labels := conditionLabelValues(result)
 	metrics.groupMakespan.WithLabelValues(labels...).Observe(result.MakespanSeconds)
-	metrics.slowestChildTTFT.WithLabelValues(labels...).Observe(result.SlowestChildTTFTSeconds)
+	observedFirstToken := false
 	for _, child := range result.Children {
-		metrics.childTTFT.WithLabelValues(labels...).Observe(child.TTFTSeconds)
+		if child.FirstTokenAt != nil {
+			metrics.childTTFT.WithLabelValues(labels...).Observe(child.TTFTSeconds)
+			observedFirstToken = true
+		}
 		metrics.childLatency.WithLabelValues(labels...).Observe(child.LatencySeconds)
+	}
+	if observedFirstToken {
+		metrics.slowestChildTTFT.WithLabelValues(labels...).Observe(result.SlowestChildTTFTSeconds)
 	}
 	switch result.Outcome {
 	case evidence.OutcomeSuccess, evidence.OutcomeFailure, evidence.OutcomeCancelled:

@@ -1,0 +1,25 @@
+{
+  "source": "experience_bank.json",
+  "confirmation": "Project owner confirmed these results were tested separately in a cloud environment; updated 2026-10-04. Current local regression runs are recorded separately.",
+  "experiences": [
+    {
+      "id": "project-jdinseattle-velaserve",
+      "title": "VelaServe — Evidence-Gated LLM Fan-Out Research Platform",
+      "bullets": [
+        "Cut cumulative client-side parser allocation by 87.1% (8,800,000 to 1,135,200 B/op) in a local CPU microbenchmark by adding an explicit no-body-retention mode for measurement callers that reuses a bounded event buffer while still running the same SSE boundary, JSON and error checks; the workload was 256 synthetic 4,096-byte content events with usage and DONE on Go 1.26.6 with identical compile flags on both sides.",
+        "Reported the same-round full-text control at 8,760,000 B/op, so most of the gain comes from explicitly changing the output-retention contract for the measurement API; the result must not be stated as 'full text is also 87.1% faster' or as a model-throughput gain.",
+        "Preserved failure measurements: failed requests keep an observed first-token time and usage, and requests with no observed first token are left absent instead of zero-filled; truncated UTF-8, oversized event, missing DONE and cancelled read-stream injections (100 each, 400 total) all returned the specified errors with no hanging goroutines.",
+        "Checked parser correctness against a handwritten expected-event table - type, content length, first-content-event position, usage and terminal state item by item - rather than comparing two result summaries.",
+        "Ran the parser comparison as six new paired processes in AB/BA order, 100 warmups and 1,000 measured iterations per side per process, with input generation outside timing and parse plus cleanup inside timing, then took the median of the six per-process B/op values; hardware was a single 8-core x86 CPU with 32 GiB and no GPU, microbenchmark single-goroutine, fault tests at concurrency 32."
+      ],
+      "limits": [
+        "B/op is the cumulative heap bytes allocated by one parse operation; it is not peak live memory, RSS, server VRAM or GPU latency, and 87.1% must not be presented as the server or the model getting 87.1% faster or lighter.",
+        "Only the explicit no-body-retention measurement mode improved; the full-text mode measured 8,760,000 B/op in the same round, and the two output contracts are not the same service.",
+        "The project proves the evidence pipeline and offline oracle contract only; the real-GPU decision gate remains closed and this CPU result carries no scheduling-benefit proof.",
+        "Historical numbers from the old export - 86.074% and 8,938,964.5 to 1,244,841.5 B/op - belong to a different round and workload; do not splice them with the 256 × 4,096-byte new round (8,800,000 to 1,135,200 B/op).",
+        "Failure samples stay in the failure denominator and TTFT is only computed on the actually observed subset; the 400 injections are synthetic (truncated UTF-8, oversized event, missing DONE, cancelled stream).",
+        "There is no real model, no GPU and no production serving: the microbenchmark is single-goroutine on one 8-core x86 CPU with 32 GiB, and fault tests use concurrency 32."
+      ]
+    }
+  ]
+}

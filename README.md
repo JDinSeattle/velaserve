@@ -8,6 +8,26 @@ Fan-out-aware scheduling research for agentic vLLM serving, built as an evidence
 
 No production placement or source-pressure mechanism has been implemented. Stage 1 freezes the question, upstream baselines, workload, evidence format, offline oracle, local simulator, recorder, statistics, Kubernetes harness, and operator-reviewed AWS handoff. A real-GPU Z0 result decides whether this project proceeds to placement coordination, narrows to source-pressure control, or stops with a negative result.
 
+## Cloud qualification results
+
+These results follow the project owner’s separately run cloud qualification recorded in the experience bank. The workload, environment, denominators and limitations below belong to that round; local regression checks for this checkout are separate. [Result record](docs/experience-bank-results.json).
+
+- Cut cumulative client-side parser allocation by 87.1% (8,800,000 to 1,135,200 B/op) in a local CPU microbenchmark by adding an explicit no-body-retention mode for measurement callers that reuses a bounded event buffer while still running the same SSE boundary, JSON and error checks; the workload was 256 synthetic 4,096-byte content events with usage and DONE on Go 1.26.6 with identical compile flags on both sides.
+
+- Reported the same-round full-text control at 8,760,000 B/op, so most of the gain comes from explicitly changing the output-retention contract for the measurement API; the result must not be stated as 'full text is also 87.1% faster' or as a model-throughput gain.
+
+- Preserved failure measurements: failed requests keep an observed first-token time and usage, and requests with no observed first token are left absent instead of zero-filled; truncated UTF-8, oversized event, missing DONE and cancelled read-stream injections (100 each, 400 total) all returned the specified errors with no hanging goroutines.
+
+- Checked parser correctness against a handwritten expected-event table - type, content length, first-content-event position, usage and terminal state item by item - rather than comparing two result summaries.
+
+- Ran the parser comparison as six new paired processes in AB/BA order, 100 warmups and 1,000 measured iterations per side per process, with input generation outside timing and parse plus cleanup inside timing, then took the median of the six per-process B/op values; hardware was a single 8-core x86 CPU with 32 GiB and no GPU, microbenchmark single-goroutine, fault tests at concurrency 32.
+
+## Checkout validation
+
+The measurement client now selects `DiscardText`, retains valid partial timing and usage on stream errors, and omits unobserved TTFT from child JSON and metric samples. Independent review also corrected payload-size admission at 64 KiB and larger (SSE framing is excluded from the payload limit), made usage snapshots atomic, and cleared cache counts when a later usage snapshot omits cache details. An invalid usage frame leaves the previous valid observation intact, so failed requests remain valid failure evidence.
+
+`go test ./... -race` passed after these changes, including exact-size LF/CRLF events, malformed usage after valid output, cancellation after observed output, and JSON-schema compatibility. This local regression run does not reproduce or replace the cloud allocation measurements above.
+
 ## What exists now
 
 - A preregistered Z0-A/B/C experiment with immutable upstream Git SHAs and a fixed 10% practical-significance threshold.
@@ -28,7 +48,7 @@ The local simulator proves protocol, correlation, artifact, and analysis plumbin
 | Fan-out headers and benchmark client | Cross-EPP plan creation or slot claims |
 | Offline N-aware oracle | Production target override |
 | Simulation-only zeroing | Source budgets or dispatch waves |
-| Real-GPU deployment handoff | Any performance claim |
+| Real-GPU deployment handoff | Any GPU scheduling-performance claim |
 
 Ordinary requests remain an upstream concern. VelaServe does not replace vLLM, llm-d Router, Envoy, Gateway API, Kubernetes discovery, KV indexing, or peer-to-peer KV transfer.
 
