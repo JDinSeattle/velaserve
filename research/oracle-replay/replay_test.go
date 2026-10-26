@@ -7,10 +7,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/JDinSeattle/velaserve/internal/evidence"
-	"github.com/JDinSeattle/velaserve/internal/fanout/model"
-	"github.com/JDinSeattle/velaserve/internal/fanout/planner"
-	"github.com/JDinSeattle/velaserve/internal/jsonl"
+	"github.com/simon-jd/velaserve/internal/evidence"
+	"github.com/simon-jd/velaserve/internal/fanout/model"
+	"github.com/simon-jd/velaserve/internal/fanout/planner"
+	"github.com/simon-jd/velaserve/internal/jsonl"
 )
 
 func TestReplayArmBSimultaneousRequestsCollideBeforeInflightPublication(t *testing.T) {

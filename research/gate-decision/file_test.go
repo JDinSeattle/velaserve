@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/JDinSeattle/velaserve/internal/evidence"
-	"github.com/JDinSeattle/velaserve/internal/jsonl"
+	"github.com/simon-jd/velaserve/internal/evidence"
+	"github.com/simon-jd/velaserve/internal/jsonl"
 )
 
 func TestGateFileWorkflowGeneratesSignsAndVerifiesDecision(t *testing.T) {

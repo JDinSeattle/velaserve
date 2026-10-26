@@ -5,7 +5,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/JDinSeattle/velaserve/internal/evidence"
+	"github.com/simon-jd/velaserve/internal/evidence"
 )
 
 func TestExpandProfileCoversFrozenWidthsAndSkewsDeterministically(t *testing.T) {

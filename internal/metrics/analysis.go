@@ -7,9 +7,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/JDinSeattle/velaserve/internal/evidence"
-	replay "github.com/JDinSeattle/velaserve/research/oracle-replay"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/simon-jd/velaserve/internal/evidence"
+	replay "github.com/simon-jd/velaserve/research/oracle-replay"
 )
 
 // WriteAnalysisTextfile materializes run-scoped, ledgerable metrics strictly

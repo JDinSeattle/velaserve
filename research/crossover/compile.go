@@ -17,8 +17,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/JDinSeattle/velaserve/internal/bench"
-	placementrecorder "github.com/JDinSeattle/velaserve/research/placement-recorder"
+	"github.com/simon-jd/velaserve/internal/bench"
+	placementrecorder "github.com/simon-jd/velaserve/research/placement-recorder"
 )
 
 const (

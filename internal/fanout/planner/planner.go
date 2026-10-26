@@ -6,8 +6,8 @@ import (
 	"math"
 	"sort"
 
-	"github.com/JDinSeattle/velaserve/internal/evidence"
-	"github.com/JDinSeattle/velaserve/internal/fanout/model"
+	"github.com/simon-jd/velaserve/internal/evidence"
+	"github.com/simon-jd/velaserve/internal/fanout/model"
 )
 
 type Calibration struct {

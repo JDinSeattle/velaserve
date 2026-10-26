@@ -1,4 +1,4 @@
-module github.com/JDinSeattle/velaserve
+module github.com/simon-jd/velaserve
 
 go 1.26.10
 

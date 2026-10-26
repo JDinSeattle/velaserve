@@ -11,10 +11,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/JDinSeattle/velaserve/internal/bench"
-	"github.com/JDinSeattle/velaserve/internal/evidence"
-	"github.com/JDinSeattle/velaserve/internal/fanout/protocol"
-	placementrecorder "github.com/JDinSeattle/velaserve/research/placement-recorder"
+	"github.com/simon-jd/velaserve/internal/bench"
+	"github.com/simon-jd/velaserve/internal/evidence"
+	"github.com/simon-jd/velaserve/internal/fanout/protocol"
+	placementrecorder "github.com/simon-jd/velaserve/research/placement-recorder"
 )
 
 const maxSimulatorRequestBytes = 8 << 20

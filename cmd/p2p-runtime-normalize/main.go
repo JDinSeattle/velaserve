@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"os"
 
-	placementrecorder "github.com/JDinSeattle/velaserve/research/placement-recorder"
-	zeroprobe "github.com/JDinSeattle/velaserve/research/zeroprobe"
+	placementrecorder "github.com/simon-jd/velaserve/research/placement-recorder"
+	zeroprobe "github.com/simon-jd/velaserve/research/zeroprobe"
 )
 
 func main() {

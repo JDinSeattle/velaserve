@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/JDinSeattle/velaserve/internal/bench"
-	"github.com/JDinSeattle/velaserve/internal/fanout/protocol"
+	"github.com/simon-jd/velaserve/internal/bench"
+	"github.com/simon-jd/velaserve/internal/fanout/protocol"
 )
 
 func TestKindUpstreamSSE(t *testing.T) {

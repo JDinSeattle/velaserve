@@ -8,7 +8,7 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/JDinSeattle/velaserve/internal/evidence"
+	"github.com/simon-jd/velaserve/internal/evidence"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 )

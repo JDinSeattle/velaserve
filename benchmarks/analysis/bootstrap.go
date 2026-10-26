@@ -6,7 +6,7 @@ import (
 	"math/rand/v2"
 	"sort"
 
-	"github.com/JDinSeattle/velaserve/internal/evidence"
+	"github.com/simon-jd/velaserve/internal/evidence"
 )
 
 func PairedImprovementCI(baseline, candidate []float64, seed int64, repetitions int, confidence float64) (evidence.ConfidenceInterval, error) {

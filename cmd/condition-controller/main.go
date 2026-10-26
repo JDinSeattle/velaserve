@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/JDinSeattle/velaserve/internal/conditioncontroller"
+	"github.com/simon-jd/velaserve/internal/conditioncontroller"
 )
 
 func main() {

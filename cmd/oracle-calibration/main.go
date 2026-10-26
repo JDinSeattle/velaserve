@@ -9,10 +9,10 @@ import (
 	"os"
 	"strings"
 
-	"github.com/JDinSeattle/velaserve/internal/bench"
-	"github.com/JDinSeattle/velaserve/internal/conditiondriver"
-	"github.com/JDinSeattle/velaserve/research/crossover"
-	replay "github.com/JDinSeattle/velaserve/research/oracle-replay"
+	"github.com/simon-jd/velaserve/internal/bench"
+	"github.com/simon-jd/velaserve/internal/conditiondriver"
+	"github.com/simon-jd/velaserve/research/crossover"
+	replay "github.com/simon-jd/velaserve/research/oracle-replay"
 	"go.yaml.in/yaml/v3"
 )
 

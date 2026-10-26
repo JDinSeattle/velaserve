@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/JDinSeattle/velaserve/internal/evidence"
-	replay "github.com/JDinSeattle/velaserve/research/oracle-replay"
+	"github.com/simon-jd/velaserve/internal/evidence"
+	replay "github.com/simon-jd/velaserve/research/oracle-replay"
 )
 
 func TestPlacementGateCellsJoinsArmBAndComputesP95(t *testing.T) {

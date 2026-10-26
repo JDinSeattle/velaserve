@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/JDinSeattle/velaserve/internal/evidence"
+	"github.com/simon-jd/velaserve/internal/evidence"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 )

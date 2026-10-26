@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/JDinSeattle/velaserve/internal/conditioncontroller"
+	"github.com/simon-jd/velaserve/internal/conditioncontroller"
 )
 
 type Handler struct {

@@ -12,19 +12,19 @@ import (
 	"strings"
 	"time"
 
-	benchmarkanalysis "github.com/JDinSeattle/velaserve/benchmarks/analysis"
-	"github.com/JDinSeattle/velaserve/internal/artifacts"
-	"github.com/JDinSeattle/velaserve/internal/bench"
-	"github.com/JDinSeattle/velaserve/internal/conditiondriver"
-	"github.com/JDinSeattle/velaserve/internal/evidence"
-	"github.com/JDinSeattle/velaserve/internal/jsonl"
-	velametrics "github.com/JDinSeattle/velaserve/internal/metrics"
-	velatrace "github.com/JDinSeattle/velaserve/internal/trace"
-	"github.com/JDinSeattle/velaserve/research/crossover"
-	gate "github.com/JDinSeattle/velaserve/research/gate-decision"
-	replay "github.com/JDinSeattle/velaserve/research/oracle-replay"
-	placementrecorder "github.com/JDinSeattle/velaserve/research/placement-recorder"
 	"github.com/prometheus/client_golang/prometheus"
+	benchmarkanalysis "github.com/simon-jd/velaserve/benchmarks/analysis"
+	"github.com/simon-jd/velaserve/internal/artifacts"
+	"github.com/simon-jd/velaserve/internal/bench"
+	"github.com/simon-jd/velaserve/internal/conditiondriver"
+	"github.com/simon-jd/velaserve/internal/evidence"
+	"github.com/simon-jd/velaserve/internal/jsonl"
+	velametrics "github.com/simon-jd/velaserve/internal/metrics"
+	velatrace "github.com/simon-jd/velaserve/internal/trace"
+	"github.com/simon-jd/velaserve/research/crossover"
+	gate "github.com/simon-jd/velaserve/research/gate-decision"
+	replay "github.com/simon-jd/velaserve/research/oracle-replay"
+	placementrecorder "github.com/simon-jd/velaserve/research/placement-recorder"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 )
 
@@ -273,7 +273,7 @@ func Run(ctx context.Context, options RunOptions) (RunCompletion, error) {
 		return RunCompletion{}, err
 	}
 	traceProvider := sdktrace.NewTracerProvider(sdktrace.WithSyncer(traceExporter))
-	traceRecorder := velatrace.New(traceProvider.Tracer("github.com/JDinSeattle/velaserve/zeroprobe"), velatrace.Limits{MaxAttributeBytes: 256})
+	traceRecorder := velatrace.New(traceProvider.Tracer("github.com/simon-jd/velaserve/zeroprobe"), velatrace.Limits{MaxAttributeBytes: 256})
 
 	expected := uint64(len(requests))
 	if options.Limit > 0 && options.Limit < uint64(len(requests)) {

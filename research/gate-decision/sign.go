@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"reflect"
 
-	"github.com/JDinSeattle/velaserve/internal/evidence"
+	"github.com/simon-jd/velaserve/internal/evidence"
 )
 
 const SignatureAlgorithm = "Ed25519"

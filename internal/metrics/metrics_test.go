@@ -4,8 +4,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/JDinSeattle/velaserve/internal/evidence"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/simon-jd/velaserve/internal/evidence"
 )
 
 func TestMetricDescriptorsDoNotContainHighCardinalityLabels(t *testing.T) {

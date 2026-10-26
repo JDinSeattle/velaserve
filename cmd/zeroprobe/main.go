@@ -10,7 +10,7 @@ import (
 	"strings"
 	"syscall"
 
-	zeroprobe "github.com/JDinSeattle/velaserve/research/zeroprobe"
+	zeroprobe "github.com/simon-jd/velaserve/research/zeroprobe"
 )
 
 func main() {

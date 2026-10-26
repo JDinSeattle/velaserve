@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/JDinSeattle/velaserve/internal/jsonl"
+	"github.com/simon-jd/velaserve/internal/jsonl"
 )
 
 const LedgerName = "ledger.jsonl"

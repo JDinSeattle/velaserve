@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/JDinSeattle/velaserve/research/crossover"
+	"github.com/simon-jd/velaserve/research/crossover"
 )
 
 func main() {

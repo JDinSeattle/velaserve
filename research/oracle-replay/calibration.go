@@ -8,8 +8,8 @@ import (
 	"reflect"
 	"sort"
 
-	"github.com/JDinSeattle/velaserve/internal/bench"
-	"github.com/JDinSeattle/velaserve/internal/conditiondriver"
+	"github.com/simon-jd/velaserve/internal/bench"
+	"github.com/simon-jd/velaserve/internal/conditiondriver"
 )
 
 // DeriveReplayProfile freezes the oracle cost model from retained crossover

@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/JDinSeattle/velaserve/internal/simfleet"
-	zeroprobe "github.com/JDinSeattle/velaserve/research/zeroprobe"
+	"github.com/simon-jd/velaserve/internal/simfleet"
+	zeroprobe "github.com/simon-jd/velaserve/research/zeroprobe"
 )
 
 func TestLocalZeroingProducesVerifiedSimulationOnlyBundle(t *testing.T) {

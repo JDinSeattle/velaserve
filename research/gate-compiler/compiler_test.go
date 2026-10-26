@@ -13,14 +13,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/JDinSeattle/velaserve/internal/bench"
-	"github.com/JDinSeattle/velaserve/internal/conditiondriver"
-	"github.com/JDinSeattle/velaserve/internal/evidence"
-	"github.com/JDinSeattle/velaserve/internal/jsonl"
-	gate "github.com/JDinSeattle/velaserve/research/gate-decision"
-	replay "github.com/JDinSeattle/velaserve/research/oracle-replay"
-	placementrecorder "github.com/JDinSeattle/velaserve/research/placement-recorder"
-	zeroprobe "github.com/JDinSeattle/velaserve/research/zeroprobe"
+	"github.com/simon-jd/velaserve/internal/bench"
+	"github.com/simon-jd/velaserve/internal/conditiondriver"
+	"github.com/simon-jd/velaserve/internal/evidence"
+	"github.com/simon-jd/velaserve/internal/jsonl"
+	gate "github.com/simon-jd/velaserve/research/gate-decision"
+	replay "github.com/simon-jd/velaserve/research/oracle-replay"
+	placementrecorder "github.com/simon-jd/velaserve/research/placement-recorder"
+	zeroprobe "github.com/simon-jd/velaserve/research/zeroprobe"
 )
 
 func timePointer(value time.Time) *time.Time { return &value }

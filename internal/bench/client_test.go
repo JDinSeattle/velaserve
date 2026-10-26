@@ -15,8 +15,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/JDinSeattle/velaserve/internal/evidence"
-	"github.com/JDinSeattle/velaserve/internal/fanout/protocol"
+	"github.com/simon-jd/velaserve/internal/evidence"
+	"github.com/simon-jd/velaserve/internal/fanout/protocol"
 )
 
 func TestRunGroupRetainsAllChildrenWhenOneSiblingFails(t *testing.T) {

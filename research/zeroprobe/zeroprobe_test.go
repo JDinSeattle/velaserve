@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/JDinSeattle/velaserve/internal/artifacts"
+	"github.com/simon-jd/velaserve/internal/artifacts"
 )
 
 func TestPrepareCreatesImmutableManifestBeforeTraffic(t *testing.T) {

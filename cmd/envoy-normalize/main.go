@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	placementrecorder "github.com/JDinSeattle/velaserve/research/placement-recorder"
+	placementrecorder "github.com/simon-jd/velaserve/research/placement-recorder"
 )
 
 func main() {

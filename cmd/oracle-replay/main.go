@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	replay "github.com/JDinSeattle/velaserve/research/oracle-replay"
+	replay "github.com/simon-jd/velaserve/research/oracle-replay"
 )
 
 func main() {

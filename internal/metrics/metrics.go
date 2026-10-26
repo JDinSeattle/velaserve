@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/JDinSeattle/velaserve/internal/evidence"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/simon-jd/velaserve/internal/evidence"
 )
 
 type Descriptor struct {

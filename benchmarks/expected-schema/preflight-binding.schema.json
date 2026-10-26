@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/JDinSeattle/velaserve/schemas/preflight-binding-v3.json",
+  "$id": "https://github.com/simon-jd/velaserve/schemas/preflight-binding-v3.json",
   "title": "VelaServe real-GPU preflight binding v3",
   "type": "object",
   "additionalProperties": false,

@@ -16,9 +16,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/JDinSeattle/velaserve/internal/evidence"
-	"github.com/JDinSeattle/velaserve/internal/fanout/protocol"
-	openaiwire "github.com/JDinSeattle/velaserve/internal/openai"
+	"github.com/simon-jd/velaserve/internal/evidence"
+	"github.com/simon-jd/velaserve/internal/fanout/protocol"
+	openaiwire "github.com/simon-jd/velaserve/internal/openai"
 )
 
 const maxErrorBodyBytes = 64 << 10

@@ -17,9 +17,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/JDinSeattle/velaserve/internal/bench"
-	"github.com/JDinSeattle/velaserve/internal/evidence"
-	"github.com/JDinSeattle/velaserve/research/crossover"
+	"github.com/simon-jd/velaserve/internal/bench"
+	"github.com/simon-jd/velaserve/internal/evidence"
+	"github.com/simon-jd/velaserve/research/crossover"
 )
 
 const maxHTTPResponseBytes = 32 << 20

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/JDinSeattle/velaserve/internal/artifacts"
+	"github.com/simon-jd/velaserve/internal/artifacts"
 )
 
 func main() {

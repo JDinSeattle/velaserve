@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/JDinSeattle/velaserve/internal/evidence"
-	"github.com/JDinSeattle/velaserve/internal/jsonl"
+	"github.com/simon-jd/velaserve/internal/evidence"
+	"github.com/simon-jd/velaserve/internal/jsonl"
 )
 
 const P2PTransferSchemaVersion = "velaserve.p2p-transfer/v1"

@@ -11,7 +11,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/JDinSeattle/velaserve/internal/clockbound"
+	"github.com/simon-jd/velaserve/internal/clockbound"
 )
 
 func main() {

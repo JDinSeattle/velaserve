@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/JDinSeattle/velaserve/schemas/gate-decision-v1.json",
+  "$id": "https://github.com/simon-jd/velaserve/schemas/gate-decision-v1.json",
   "title": "VelaServe gate decision v1",
   "type": "object",
   "additionalProperties": false,

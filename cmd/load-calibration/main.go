@@ -19,9 +19,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/JDinSeattle/velaserve/internal/bench"
-	"github.com/JDinSeattle/velaserve/internal/conditiondriver"
-	"github.com/JDinSeattle/velaserve/internal/evidence"
+	"github.com/simon-jd/velaserve/internal/bench"
+	"github.com/simon-jd/velaserve/internal/conditiondriver"
+	"github.com/simon-jd/velaserve/internal/evidence"
 )
 
 const maxAuthorizationBytes = 64 << 10

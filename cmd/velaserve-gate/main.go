@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	gatecompiler "github.com/JDinSeattle/velaserve/research/gate-compiler"
-	gate "github.com/JDinSeattle/velaserve/research/gate-decision"
+	gatecompiler "github.com/simon-jd/velaserve/research/gate-compiler"
+	gate "github.com/simon-jd/velaserve/research/gate-decision"
 )
 
 func main() {

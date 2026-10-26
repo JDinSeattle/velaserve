@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/JDinSeattle/velaserve/internal/schemacheck"
+	"github.com/simon-jd/velaserve/internal/schemacheck"
 )
 
 func main() {

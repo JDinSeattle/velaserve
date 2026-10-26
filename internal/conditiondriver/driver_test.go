@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/JDinSeattle/velaserve/internal/conditioncontroller"
-	"github.com/JDinSeattle/velaserve/internal/evidence"
+	"github.com/simon-jd/velaserve/internal/conditioncontroller"
+	"github.com/simon-jd/velaserve/internal/evidence"
 )
 
 func TestApplyResetsEveryEndpointAndWarmsExactZ0CSourceSet(t *testing.T) {

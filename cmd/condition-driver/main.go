@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/JDinSeattle/velaserve/internal/conditiondriver"
+	"github.com/simon-jd/velaserve/internal/conditiondriver"
 )
 
 const maxConfigBytes = 1 << 20

@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/JDinSeattle/velaserve/internal/bench"
-	"github.com/JDinSeattle/velaserve/internal/clockbound"
-	"github.com/JDinSeattle/velaserve/internal/evidence"
+	"github.com/simon-jd/velaserve/internal/bench"
+	"github.com/simon-jd/velaserve/internal/clockbound"
+	"github.com/simon-jd/velaserve/internal/evidence"
 )
 
 func TestLoadPreflightBindingRejectsProfileMismatch(t *testing.T) {

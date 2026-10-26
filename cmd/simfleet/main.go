@@ -12,7 +12,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/JDinSeattle/velaserve/internal/simfleet"
+	"github.com/simon-jd/velaserve/internal/simfleet"
 )
 
 func main() {

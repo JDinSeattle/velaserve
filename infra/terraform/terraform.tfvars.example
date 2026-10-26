@@ -13,6 +13,6 @@ gpu_maximum_replicas            = 8
 gpu_capacity_type               = "on-demand"
 
 tags = {
-  Owner       = "JDinSeattle"
+  Owner       = "simon-jd"
   Environment = "z0"
 }

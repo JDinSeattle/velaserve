@@ -6,7 +6,7 @@ The current Stage-1 code is a research and benchmark harness, not a production i
 
 ## Report privately
 
-Do not publish a vulnerability, credential, private endpoint, prompt, model artifact, or AWS account detail in a public issue. Use GitHub's private vulnerability reporting for `JDinSeattle/velaserve` when available. Include the affected commit, minimal reproduction, impact, and whether the issue can expose artifact contents or cause unintended cloud/Kubernetes mutation.
+Do not publish a vulnerability, credential, private endpoint, prompt, model artifact, or AWS account detail in a public issue. Use GitHub's private vulnerability reporting for `simon-jd/velaserve` when available. Include the affected commit, minimal reproduction, impact, and whether the issue can expose artifact contents or cause unintended cloud/Kubernetes mutation.
 
 ## Safety properties
 

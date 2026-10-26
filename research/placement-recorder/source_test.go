@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/JDinSeattle/velaserve/internal/evidence"
+	"github.com/simon-jd/velaserve/internal/evidence"
 )
 
 func TestSourcePressureOmitsUnavailableHardwareCounters(t *testing.T) {

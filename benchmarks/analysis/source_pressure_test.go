@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/JDinSeattle/velaserve/internal/evidence"
-	placementrecorder "github.com/JDinSeattle/velaserve/research/placement-recorder"
+	"github.com/simon-jd/velaserve/internal/evidence"
+	placementrecorder "github.com/simon-jd/velaserve/research/placement-recorder"
 )
 
 func TestSourcePressureGateCellsRequiresAllRegisteredSourceCounts(t *testing.T) {

@@ -4,7 +4,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	zeroprobe "github.com/JDinSeattle/velaserve/research/zeroprobe"
+	zeroprobe "github.com/simon-jd/velaserve/research/zeroprobe"
 )
 
 func TestHashPreflightReturnsValidatedInvariant(t *testing.T) {
