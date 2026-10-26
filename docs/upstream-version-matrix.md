@@ -8,7 +8,7 @@
 | llm-d | `3243fcf1191348b55c7811267a98117f8b7a6910` | Baseline manifests/reference |
 | llm-d KV Cache | `8cf43067afb7fc9fefafc1b64de063c769f2c90f` | P2P/KV integration reference |
 | vLLM | `b1fbbc2ade51e3826bc92e4733c9c692ee21d42d` | Real model-engine baseline |
-| Go | `1.26.6` | Build and CI toolchain |
+| Go | `1.26.10` | Build and CI toolchain |
 | Helm | `3.21.4` | Chart lint/render/install |
 | Kind | `0.32.0` | Local Kubernetes harness |
 | Terraform | `1.15.8` | AWS configuration validation/plan |

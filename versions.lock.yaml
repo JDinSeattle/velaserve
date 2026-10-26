@@ -1,7 +1,7 @@
 schema_version: velaserve.versions/v1
 frozen_at: 2026-08-26T06:00:00Z
 go:
-  version: 1.26.6
+  version: 1.26.10
 upstreams:
   llm_d_router:
     repository: https://github.com/llm-d/llm-d-router.git

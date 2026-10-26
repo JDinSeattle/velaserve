@@ -1,6 +1,6 @@
 module github.com/JDinSeattle/velaserve
 
-go 1.26.6
+go 1.26.10
 
 require (
 	github.com/oklog/ulid/v2 v2.1.2

@@ -54,7 +54,7 @@ Ordinary requests remain an upstream concern. VelaServe does not replace vLLM, l
 
 ## Reproduce locally
 
-Prerequisites are Go 1.26.6, Docker Engine, `kubectl`, `curl`, `jq`, and network access for the first pinned-tool/upstream fetch. The bootstrap script downloads checksum-verified Helm, Kind, and Terraform binaries into ignored `.tools/` state.
+Prerequisites are Go 1.26.10, Docker Engine, `kubectl`, `curl`, `jq`, and network access for the first pinned-tool/upstream fetch. The bootstrap script downloads checksum-verified Helm, Kind, and Terraform binaries into ignored `.tools/` state.
 
 Run the complete AWS-independent audit:
 
