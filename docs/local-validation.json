@@ -1,5 +1,5 @@
 {
-  "scope": "Current checkout verification, separate from owner-confirmed cloud results.",
+  "scope": "Current checkout verification, separate from the cloud results in the README.",
   "checks": [
     {
       "command": "go test ./internal/bench -run TestRunGroupRetainsValidFactsAcrossMalformedUsageAndCancellation -count=1",

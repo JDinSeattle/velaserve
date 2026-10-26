@@ -8,9 +8,9 @@ Fan-out-aware scheduling research for agentic vLLM serving, built as an evidence
 
 No production placement or source-pressure mechanism has been implemented. Stage 1 freezes the question, upstream baselines, workload, evidence format, offline oracle, local simulator, recorder, statistics, Kubernetes harness, and operator-reviewed AWS handoff. A real-GPU Z0 result decides whether this project proceeds to placement coordination, narrows to source-pressure control, or stops with a negative result.
 
-## Cloud qualification results
+## Results
 
-These results follow the project owner’s separately run cloud qualification recorded in the experience bank. The workload, environment, denominators and limitations below belong to that round; local regression checks for this checkout are separate. [Result record](docs/experience-bank-results.json).
+These results come from a separate cloud test run. The workload, environment, denominators and limitations below belong to that run; local regression checks for this checkout are separate.
 
 - Cut cumulative client-side parser allocation by 87.1% (8,800,000 to 1,135,200 B/op) in a local CPU microbenchmark by adding an explicit no-body-retention mode for measurement callers that reuses a bounded event buffer while still running the same SSE boundary, JSON and error checks; the workload was 256 synthetic 4,096-byte content events with usage and DONE on Go 1.26.6 with identical compile flags on both sides.
 
